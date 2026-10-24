@@ -1193,6 +1193,44 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         }
       }
 
+      // Anti-Cheating Integrity Audit Log (Violations breakdown)
+      const auditCard = document.getElementById('detail-audit-card');
+      const auditList = document.getElementById('detail-audit-list');
+      const auditCount = document.getElementById('detail-audit-count');
+      let vLogs = [];
+      try {
+        if (typeof data.violations_log === 'string') {
+          vLogs = JSON.parse(data.violations_log || '[]');
+        } else if (Array.isArray(data.violations_log)) {
+          vLogs = data.violations_log;
+        }
+      } catch (e) {
+        vLogs = [];
+      }
+
+      if (auditCard && auditList) {
+        if (vLogs && vLogs.length > 0) {
+          auditCard.style.display = 'block';
+          if (auditCount) auditCount.textContent = `${vLogs.length} Security Incident${vLogs.length === 1 ? '' : 's'}`;
+          auditList.innerHTML = '';
+          vLogs.forEach((v, idx) => {
+            const vRow = document.createElement('div');
+            vRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:0.45rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border-default); border-radius:var(--radius-sm);';
+            vRow.innerHTML = `
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <span style="color:var(--accent-rose); font-weight:600;">#${idx + 1}</span>
+                <span style="color:var(--text-primary); font-weight:500;">${this.escapeHtml(v.description || v.type || 'Window switch')}</span>
+                ${v.questionIdx ? `<span class="badge badge-slate" style="font-size:0.7rem;">Question ${v.questionIdx}</span>` : ''}
+              </div>
+              <span style="color:var(--text-muted); font-size:0.75rem; font-family:monospace;">${this.escapeHtml(v.timestamp || '')}</span>
+            `;
+            auditList.appendChild(vRow);
+          });
+        } else {
+          auditCard.style.display = 'none';
+        }
+      }
+
       // Render Questions Breakdown
       const questionsContainer = document.getElementById('detail-questions-list');
       questionsContainer.innerHTML = '';
