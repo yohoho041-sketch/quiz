@@ -36,6 +36,26 @@ def is_teacher_authorized(headers) -> bool:
     return bool(pin and pin == TEACHER_PIN)
 
 
+TEACHER_PIN_ATTEMPTS = {}  # client_ip -> {"count": int, "locked_until": float}
+
+
+def is_client_locked_out(client_ip: str) -> bool:
+    info = TEACHER_PIN_ATTEMPTS.get(client_ip)
+    if info and info.get("locked_until", 0) > time.time():
+        return True
+    return False
+
+
+def record_pin_attempt(client_ip: str, is_success: bool):
+    if is_success:
+        TEACHER_PIN_ATTEMPTS.pop(client_ip, None)
+    else:
+        info = TEACHER_PIN_ATTEMPTS.setdefault(client_ip, {"count": 0, "locked_until": 0})
+        info["count"] += 1
+        if info["count"] >= 5:
+            info["locked_until"] = time.time() + 900  # Lock out for 15 minutes
+
+
 class QuizRequestHandler(BaseHTTPRequestHandler):
     server_version = "QuizApp/1.0"
 
@@ -235,10 +255,20 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
         # POST /api/teacher/verify
         if len(parts) == 3 and parts[1] == "teacher" and parts[2] == "verify":
+            client_ip = self.client_address[0] if (hasattr(self, "client_address") and self.client_address) else "client"
+            if is_client_locked_out(client_ip):
+                return self.send_error_json("Too many incorrect attempts. Authentication locked for 15 minutes.", 429)
+
             pin = payload.get("pin", "") or self.headers.get("X-Teacher-PIN", "")
             if str(pin).strip() == TEACHER_PIN:
+                record_pin_attempt(client_ip, is_success=True)
                 return self.send_json({"success": True, "message": "Teacher verified successfully"})
-            return self.send_error_json("Invalid Teacher PIN", 403)
+
+            record_pin_attempt(client_ip, is_success=False)
+            attempts_left = max(0, 5 - TEACHER_PIN_ATTEMPTS.get(client_ip, {}).get("count", 0))
+            if attempts_left == 0:
+                return self.send_error_json("Too many failed attempts. Locked for 15 minutes.", 429)
+            return self.send_error_json(f"Invalid passcode. ({attempts_left} attempts remaining)", 403)
 
         # POST /api/quizzes
         if len(parts) == 2 and parts[1] == "quizzes":

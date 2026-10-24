@@ -19,12 +19,19 @@ const App = {
     this.updateTeacherModeUI();
     this.showDashboard();
     this.refreshHistoryBadge();
+
+    // Check if teacher accesses via URL query (?teacher or ?admin)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!this.isTeacherMode && (urlParams.has('teacher') || urlParams.has('admin'))) {
+      this.openTeacherLoginModal();
+    }
   },
 
   updateTeacherModeUI() {
     const navPortalTag = document.getElementById('nav-portal-tag');
     const btnNavCreate = document.getElementById('btn-nav-create');
     const teacherBanner = document.getElementById('teacher-mode-banner');
+    const btnTeacherToggle = document.getElementById('btn-teacher-toggle');
     const teacherToggleLabel = document.getElementById('teacher-toggle-label');
     const teacherLockIcon = document.getElementById('teacher-lock-icon');
     const historyTabLabel = document.getElementById('history-tab-label');
@@ -35,6 +42,7 @@ const App = {
         navPortalTag.className = 'brand-portal-tag teacher-active';
       }
       if (btnNavCreate) btnNavCreate.style.display = 'inline-flex';
+      if (btnTeacherToggle) btnTeacherToggle.style.display = 'inline-flex';
       if (teacherBanner) teacherBanner.classList.add('active');
       if (teacherToggleLabel) teacherToggleLabel.textContent = 'Teacher Active';
       if (teacherLockIcon) {
@@ -47,11 +55,8 @@ const App = {
         navPortalTag.className = 'brand-portal-tag';
       }
       if (btnNavCreate) btnNavCreate.style.display = 'none';
+      if (btnTeacherToggle) btnTeacherToggle.style.display = 'none'; // Completely hidden for students!
       if (teacherBanner) teacherBanner.classList.remove('active');
-      if (teacherToggleLabel) teacherToggleLabel.textContent = 'Teacher Login';
-      if (teacherLockIcon) {
-        teacherLockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
-      }
       if (historyTabLabel) historyTabLabel.textContent = 'My Attempts';
     }
   },
@@ -134,6 +139,27 @@ const App = {
         }
       }
     });
+
+    // Stealth trigger: triple-click on brand logo to open teacher modal
+    const brandLogo = document.getElementById('nav-brand');
+    if (brandLogo) {
+      let clickCount = 0;
+      let clickTimer = null;
+      brandLogo.addEventListener('click', (e) => {
+        clickCount++;
+        if (clickCount === 3) {
+          clearTimeout(clickTimer);
+          clickCount = 0;
+          this.openTeacherLoginModal();
+        } else {
+          clearTimeout(clickTimer);
+          clickTimer = setTimeout(() => {
+            clickCount = 0;
+            this.showDashboard();
+          }, 350);
+        }
+      });
+    }
   },
 
   openTeacherLoginModal() {
@@ -256,11 +282,6 @@ const App = {
   },
 
   bindGlobalEvents() {
-    // Navigation brand click
-    document.getElementById('nav-brand').addEventListener('click', () => {
-      this.showDashboard();
-    });
-
     // Top Segmented Nav Tabs
     document.getElementById('tab-assessments').addEventListener('click', () => {
       this.showDashboard();

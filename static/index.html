@@ -58,8 +58,8 @@
         <span id="fs-btn-label">Fullscreen</span>
       </button>
 
-      <!-- Teacher Access Button -->
-      <button class="btn btn-outline btn-sm" id="btn-teacher-toggle" title="Teacher Authentication">
+      <!-- Teacher Access Button (Hidden from students by default, unlocked via triple-click, shortcut, or ?teacher=1) -->
+      <button class="btn btn-outline btn-sm" id="btn-teacher-toggle" title="Teacher Authentication" style="display:none;">
         <svg id="teacher-lock-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -863,14 +863,14 @@ Explanation: UDP is connectionless and does not guarantee packet ordering."></te
       <div class="modal-header">
         <div>
           <h3 class="modal-title">Teacher Authentication</h3>
-          <p class="modal-subtitle">Enter teacher master PIN to create or manage assessments.</p>
+          <p class="modal-subtitle">Enter teacher master passcode to unlock management features.</p>
         </div>
         <button class="modal-close" id="teacher-login-close" title="Close (Esc)">✕</button>
       </div>
       <div class="modal-body" style="padding: 1.5rem;">
         <div class="form-group">
-          <label class="form-label" for="teacher-pin-input" style="font-weight: 600;">Teacher PIN</label>
-          <input type="password" id="teacher-pin-input" class="form-control" placeholder="Enter PIN (Default: 2026)" maxlength="20" autofocus autocomplete="off">
+          <label class="form-label" for="teacher-pin-input" style="font-weight: 600;">Passcode / PIN</label>
+          <input type="password" id="teacher-pin-input" class="form-control" placeholder="••••••••" maxlength="32" autofocus autocomplete="off">
           <p id="teacher-pin-error" style="display:none; color:var(--accent-rose); font-size:0.8rem; margin-top:0.4rem;"></p>
         </div>
       </div>
