@@ -1,29 +1,42 @@
 # QuizMaster ⚡
 
-A high-performance, distraction-free **Multiple Choice Question (MCQ) Assessment & Quiz Application** with high-resolution diagram support, designed to run as a **native desktop application on Solus Linux GNOME** and **100% offline** with **zero external dependencies**.
+A high-performance, distraction-free **Online Assessment Platform & CBT Exam Portal** with strict **Anti-Cheating Proctoring**, offline KaTeX mathematical typesetting, and role-based security separating the public **Student Portal** from the **Teacher Studio**.
 
 ---
 
-## 🎨 Design Philosophy
+## 🎓 Public Student Portal vs 🔒 Teacher Mode
 
-Engineered with a **Linear/Raycast-inspired dark theme**:
-- **Hardware-Tactile Keycaps**: Options are paired with physical-style keycap badges (`[A]`, `[B]`, `[C]`, `[D]`) for rapid keyboard answering.
-- **Deep Slate Palette**: Minimalist surfaces (`#090c10`, `#0e1217`, `#151a22`), hairline borders (`1px solid rgba(255, 255, 255, 0.06)`), zero visual clutter.
-- **Precision Metrics**: Monospace digital timer, clean percentage progress, and executive scorecards.
-- **High-Fidelity Diagrams**: Question images and vector schematics open in a distraction-free Lightbox modal for full-resolution review.
+- **Student Portal (Default / Public View)**:
+  - Students can only view available assignments and take examinations.
+  - No creation, editing, or deletion controls are available to students.
+  - Before starting an exam, students verify their identity with their **Full Name** and **Roll Number / Student ID**.
+- **Real-Time Anti-Cheating & Exam Lockdown**:
+  - Automatically activates **Fullscreen Mode** on exam start.
+  - Detects tab switches, minimizing the browser, losing window focus, or switching applications.
+  - Triggers an **immediate audio alert and high-visibility warning popup** notifying the student that their violation has been recorded.
+  - Tracks total security warnings and stores them alongside their submitted attempt.
+- **Teacher Mode (Protected with Master PIN)**:
+  - Default Teacher PIN: `2026` (Customizable via `TEACHER_PIN` environment variable).
+  - Can be unlocked via the top navigation bar or keyboard shortcut: `Ctrl + Shift + T` or `Alt + T`.
+  - Gives full authority to create, edit, and delete assessments.
+  - Unlocks the **Student Submissions & Marks Log** to review every student attempt, scores, JEE net marks, question-by-question breakdown, and proctoring warnings.
 
 ---
 
-## 🖥️ Native GNOME Solus App
+## 🚀 Connecting with Vercel
 
-Built with Solus Linux's native **GTK 4**, **Libadwaita (Adw 1)**, and **WebKit 6** stack:
-- Runs in a native GNOME window with native Libadwaita dark headerbar and window controls.
-- Seamlessly starts and stops the local offline Python server automatically.
-- Accessible directly from the Solus Budgie / GNOME Application Menu.
+QuizMaster is pre-configured for 1-click deployment on [Vercel](https://vercel.com):
+
+1. Push this repository to your GitHub account (`git push origin main`).
+2. Go to [vercel.com](https://vercel.com) and click **"Add New Project"**.
+3. Import your GitHub repository (`quiz`).
+4. (Optional) In **Environment Variables**, set:
+   - `TEACHER_PIN`: Your secret teacher passcode (e.g. `2026`).
+5. Click **Deploy**. Vercel will build and serve both the frontend and the Python serverless backend automatically via `vercel.json` and `api/index.py`!
 
 ---
 
-## ⚡ Quick Start (One Command)
+## 🖥️ Local & Native Desktop Execution
 
 From this directory, run:
 
@@ -47,7 +60,8 @@ Or launch it directly anytime:
 | `←` or `P` | Previous Question |
 | `→` or `N` | Next Question |
 | `F` | Flag / Unflag Question for Review |
-| `Esc` | Close Diagram Zoom Modal |
+| `Ctrl + Shift + T` or `Alt + T` | Toggle Teacher Mode (PIN Authentication) |
+| `Esc` | Close Modal / Lightbox |
 
 ---
 
@@ -58,3 +72,4 @@ Run backend tests:
 ```bash
 python3 tests/test_server.py
 ```
+

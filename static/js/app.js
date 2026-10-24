@@ -9,11 +9,250 @@ const App = {
   allAttempts: [],
   activeCategory: 'All',
   lastCompletedQuiz: null,
+  isTeacherMode: false,
+  pendingQuizIdForExam: null,
 
   init() {
+    this.isTeacherMode = Boolean(API.getTeacherPin());
     this.bindGlobalEvents();
+    this.bindTeacherAndCandidateEvents();
+    this.updateTeacherModeUI();
     this.showDashboard();
     this.refreshHistoryBadge();
+  },
+
+  updateTeacherModeUI() {
+    const navPortalTag = document.getElementById('nav-portal-tag');
+    const btnNavCreate = document.getElementById('btn-nav-create');
+    const teacherBanner = document.getElementById('teacher-mode-banner');
+    const teacherToggleLabel = document.getElementById('teacher-toggle-label');
+    const teacherLockIcon = document.getElementById('teacher-lock-icon');
+    const historyTabLabel = document.getElementById('history-tab-label');
+
+    if (this.isTeacherMode) {
+      if (navPortalTag) {
+        navPortalTag.textContent = 'Teacher Mode';
+        navPortalTag.className = 'brand-portal-tag teacher-active';
+      }
+      if (btnNavCreate) btnNavCreate.style.display = 'inline-flex';
+      if (teacherBanner) teacherBanner.classList.add('active');
+      if (teacherToggleLabel) teacherToggleLabel.textContent = 'Teacher Active';
+      if (teacherLockIcon) {
+        teacherLockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>';
+      }
+      if (historyTabLabel) historyTabLabel.textContent = 'Submissions';
+    } else {
+      if (navPortalTag) {
+        navPortalTag.textContent = 'Student Portal';
+        navPortalTag.className = 'brand-portal-tag';
+      }
+      if (btnNavCreate) btnNavCreate.style.display = 'none';
+      if (teacherBanner) teacherBanner.classList.remove('active');
+      if (teacherToggleLabel) teacherToggleLabel.textContent = 'Teacher Login';
+      if (teacherLockIcon) {
+        teacherLockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+      }
+      if (historyTabLabel) historyTabLabel.textContent = 'My Attempts';
+    }
+  },
+
+  bindTeacherAndCandidateEvents() {
+    // Teacher toggle button in top nav
+    const btnTeacherToggle = document.getElementById('btn-teacher-toggle');
+    if (btnTeacherToggle) {
+      btnTeacherToggle.addEventListener('click', () => {
+        if (this.isTeacherMode) {
+          this.exitTeacherMode();
+        } else {
+          this.openTeacherLoginModal();
+        }
+      });
+    }
+
+    // Teacher logout button in banner
+    const btnTeacherLogout = document.getElementById('btn-teacher-logout');
+    if (btnTeacherLogout) {
+      btnTeacherLogout.addEventListener('click', () => {
+        this.exitTeacherMode();
+      });
+    }
+
+    // Teacher Login Modal handlers
+    const teacherModal = document.getElementById('teacher-login-modal');
+    const btnTeacherCancel = document.getElementById('btn-teacher-login-cancel');
+    const btnTeacherClose = document.getElementById('teacher-login-close');
+    const btnTeacherSubmit = document.getElementById('btn-teacher-login-submit');
+    const teacherPinInput = document.getElementById('teacher-pin-input');
+
+    if (btnTeacherCancel) btnTeacherCancel.addEventListener('click', () => this.closeTeacherLoginModal());
+    if (btnTeacherClose) btnTeacherClose.addEventListener('click', () => this.closeTeacherLoginModal());
+    if (btnTeacherSubmit) btnTeacherSubmit.addEventListener('click', () => this.submitTeacherLogin());
+    if (teacherPinInput) {
+      teacherPinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.submitTeacherLogin();
+        }
+      });
+    }
+
+    // Student Candidate Entry Modal handlers
+    const btnStudentCancel = document.getElementById('btn-student-entry-cancel');
+    const btnStudentClose = document.getElementById('student-entry-close');
+    const btnStudentStart = document.getElementById('btn-student-entry-start');
+    const studentNameInput = document.getElementById('student-input-name');
+    const studentRollInput = document.getElementById('student-input-roll');
+
+    if (btnStudentCancel) btnStudentCancel.addEventListener('click', () => this.closeStudentEntryModal());
+    if (btnStudentClose) btnStudentClose.addEventListener('click', () => this.closeStudentEntryModal());
+    if (btnStudentStart) btnStudentStart.addEventListener('click', () => this.startExamWithCandidateInfo());
+    if (studentNameInput) {
+      studentNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (studentRollInput) studentRollInput.focus();
+        }
+      });
+    }
+    if (studentRollInput) {
+      studentRollInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.startExamWithCandidateInfo();
+        }
+      });
+    }
+
+    // Global shortcut Ctrl+Shift+T or Alt+T for teacher mode toggle
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 't') || (e.altKey && e.key.toLowerCase() === 't')) {
+        e.preventDefault();
+        if (this.isTeacherMode) {
+          this.exitTeacherMode();
+        } else {
+          this.openTeacherLoginModal();
+        }
+      }
+    });
+  },
+
+  openTeacherLoginModal() {
+    const modal = document.getElementById('teacher-login-modal');
+    const input = document.getElementById('teacher-pin-input');
+    const errEl = document.getElementById('teacher-pin-error');
+    if (errEl) errEl.style.display = 'none';
+    if (input) input.value = '';
+    if (modal) modal.classList.add('active');
+    setTimeout(() => { if (input) input.focus(); }, 100);
+  },
+
+  closeTeacherLoginModal() {
+    const modal = document.getElementById('teacher-login-modal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  async submitTeacherLogin() {
+    const input = document.getElementById('teacher-pin-input');
+    const errEl = document.getElementById('teacher-pin-error');
+    const pin = (input ? input.value : '').trim();
+    if (!pin) {
+      if (errEl) {
+        errEl.textContent = 'Please enter teacher PIN';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    try {
+      await API.verifyTeacherPin(pin);
+      this.enterTeacherMode(pin);
+      this.closeTeacherLoginModal();
+      this.showToast('Teacher Mode unlocked successfully', 'success');
+    } catch (err) {
+      if (errEl) {
+        errEl.textContent = err.message || 'Incorrect Teacher PIN';
+        errEl.style.display = 'block';
+      }
+    }
+  },
+
+  enterTeacherMode(pin) {
+    this.isTeacherMode = true;
+    API.setTeacherPin(pin);
+    this.updateTeacherModeUI();
+    if (this.currentView === 'dashboard') {
+      this.renderDashboardCards();
+    } else if (this.currentView === 'history') {
+      this.showHistory();
+    }
+  },
+
+  exitTeacherMode() {
+    this.isTeacherMode = false;
+    API.setTeacherPin('');
+    this.updateTeacherModeUI();
+    this.showToast('Switched to Student Portal view', 'info');
+    if (this.currentView === 'dashboard') {
+      this.renderDashboardCards();
+    } else if (this.currentView === 'history') {
+      this.showHistory();
+    }
+  },
+
+  promptCandidateDetails(quizId, mode = 'exam') {
+    if (mode !== 'exam') {
+      this.startQuiz(quizId, mode);
+      return;
+    }
+    this.pendingQuizIdForExam = quizId;
+    const modal = document.getElementById('student-entry-modal');
+    if (!modal) {
+      this.startQuiz(quizId, mode);
+      return;
+    }
+    const q = this.allQuizzes.find(x => x.id === quizId);
+    const titleEl = document.getElementById('student-modal-quiz-title');
+    if (titleEl && q) {
+      titleEl.textContent = `${q.title} — Candidate Verification`;
+    }
+    const nameInput = document.getElementById('student-input-name');
+    const rollInput = document.getElementById('student-input-roll');
+    if (nameInput) nameInput.value = localStorage.getItem('quiz_student_name') || '';
+    if (rollInput) rollInput.value = localStorage.getItem('quiz_student_roll') || '';
+    modal.classList.add('active');
+    setTimeout(() => {
+      if (nameInput) {
+        nameInput.focus();
+        if (nameInput.value) nameInput.select();
+      }
+    }, 100);
+  },
+
+  closeStudentEntryModal() {
+    const modal = document.getElementById('student-entry-modal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  startExamWithCandidateInfo() {
+    const nameInput = document.getElementById('student-input-name');
+    const rollInput = document.getElementById('student-input-roll');
+    const name = (nameInput ? nameInput.value : '').trim();
+    const roll = (rollInput ? rollInput.value : '').trim();
+
+    if (!name) {
+      this.showToast('Please enter your full name to begin', 'warning');
+      if (nameInput) nameInput.focus();
+      return;
+    }
+
+    localStorage.setItem('quiz_student_name', name);
+    localStorage.setItem('quiz_student_roll', roll);
+    this.closeStudentEntryModal();
+
+    if (this.pendingQuizIdForExam) {
+      const qid = this.pendingQuizIdForExam;
+      this.pendingQuizIdForExam = null;
+      this.startQuiz(qid, 'exam', { name, roll });
+    }
   },
 
   bindGlobalEvents() {
@@ -431,6 +670,10 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
     });
 
     if (this.allQuizzes.length === 0) {
+      const createBtnHtml = this.isTeacherMode
+        ? `<button class="btn btn-primary" onclick="App.showBuilder()">+ Create Assessment</button>`
+        : `<p style="font-size:0.875rem; color:var(--text-muted); margin-top:0.5rem;">Please check back soon or notify your teacher.</p>`;
+
       grid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 4.5rem 1.5rem; color: var(--text-muted);">
           <div style="width: 44px; height: 44px; border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; color: var(--accent-indigo);">
@@ -443,9 +686,9 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           </div>
           <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem;">No assessments yet</h3>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; max-width: 380px; margin-left: auto; margin-right: auto;">
-            Get started by authoring a new assessment or importing questions from text or JSON.
+            ${this.isTeacherMode ? 'Get started by authoring a new assessment or importing questions from text or JSON.' : 'No assessments are published at this moment.'}
           </p>
-          <button class="btn btn-primary" onclick="App.showBuilder()">+ Create Assessment</button>
+          ${createBtnHtml}
         </div>
       `;
       return;
@@ -469,6 +712,23 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       const scoreBadge = q.best_score_percent !== null && q.best_score_percent !== undefined
         ? `<span class="badge badge-emerald">Best: ${Math.round(q.best_score_percent)}%</span>`
         : `<span class="badge badge-slate">Unattempted</span>`;
+
+      const editBtnHtml = this.isTeacherMode
+        ? `<button class="btn btn-outline btn-sm btn-edit-quiz" title="Edit Assessment">
+             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+           </button>`
+        : '';
+      const delBtnHtml = this.isTeacherMode
+        ? `<button class="btn btn-danger btn-sm btn-del-quiz" title="Delete Assessment">
+             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+           </button>`
+        : '';
+      const practiceBtnHtml = this.isTeacherMode
+        ? `<button class="btn btn-secondary btn-sm btn-start-practice" title="Practice mode with instant answer reveal" style="gap: 0.45rem;">
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+             <span>Practice</span>
+           </button>`
+        : '';
 
       card.innerHTML = `
         <div>
@@ -507,34 +767,36 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           <div class="quiz-card-actions">
             <button class="btn btn-primary btn-sm btn-start-exam" style="flex: 2; gap: 0.45rem;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              <span>Start Exam</span>
+              <span>${this.isTeacherMode ? 'Take Exam' : 'Take Assignment'}</span>
             </button>
-            <button class="btn btn-secondary btn-sm btn-start-practice" title="Practice mode with instant answer reveal" style="gap: 0.45rem;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span>Practice</span>
-            </button>
-            <button class="btn btn-outline btn-sm btn-edit-quiz" title="Edit Assessment">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="btn btn-danger btn-sm btn-del-quiz" title="Delete Assessment">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
+            ${practiceBtnHtml}
+            ${editBtnHtml}
+            ${delBtnHtml}
           </div>
         </div>
       `;
 
       card.querySelector('.btn-start-exam').addEventListener('click', () => {
-        this.startQuiz(q.id, 'exam');
+        this.promptCandidateDetails(q.id, 'exam');
       });
-      card.querySelector('.btn-start-practice').addEventListener('click', () => {
-        this.startQuiz(q.id, 'practice');
-      });
-      card.querySelector('.btn-edit-quiz').addEventListener('click', () => {
-        this.editQuiz(q.id);
-      });
-      card.querySelector('.btn-del-quiz').addEventListener('click', () => {
-        this.deleteQuiz(q.id, q.title);
-      });
+      const practiceBtn = card.querySelector('.btn-start-practice');
+      if (practiceBtn) {
+        practiceBtn.addEventListener('click', () => {
+          this.startQuiz(q.id, 'practice');
+        });
+      }
+      const editBtn = card.querySelector('.btn-edit-quiz');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          this.editQuiz(q.id);
+        });
+      }
+      const delBtn = card.querySelector('.btn-del-quiz');
+      if (delBtn) {
+        delBtn.addEventListener('click', () => {
+          this.deleteQuiz(q.id, q.title);
+        });
+      }
 
       grid.appendChild(card);
     });
@@ -544,7 +806,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
   async showHistory() {
     this.switchView('history');
     const container = document.getElementById('history-list');
-    container.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading test history...</div>';
+    container.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading records...</div>';
 
     try {
       this.allAttempts = await API.getAllAttempts();
@@ -552,7 +814,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
 
       const btnClearHistory = document.getElementById('btn-clear-history');
       if (btnClearHistory) {
-        btnClearHistory.style.display = this.allAttempts.length === 0 ? 'none' : 'inline-flex';
+        btnClearHistory.style.display = (this.isTeacherMode && this.allAttempts.length > 0) ? 'inline-flex' : 'none';
       }
 
       if (this.allAttempts.length === 0) {
@@ -560,12 +822,120 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
             <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 0.5rem;">No test attempts recorded yet</p>
             <p style="font-size: 0.85rem; margin-bottom: 1.25rem;">Complete an assessment in Exam mode to view your full performance history.</p>
-            <button class="btn btn-primary" onclick="App.showDashboard()">Browse Assessments</button>
+            <button class="btn btn-primary" onclick="App.showDashboard()">Browse Assignments</button>
           </div>
         `;
         return;
       }
 
+      // TEACHER VIEW: Submissions & Integrity Audit Table
+      if (this.isTeacherMode) {
+        let tableHtml = `
+          <div style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:0.875rem; color:var(--text-secondary);">
+              Showing <b>${this.allAttempts.length}</b> student test submissions with integrity &amp; warning audit.
+            </div>
+          </div>
+          <div style="overflow-x:auto; background:var(--bg-surface); border:1px solid var(--border-default); border-radius:var(--radius-md);">
+            <table class="submissions-table">
+              <thead>
+                <tr>
+                  <th>Student Candidate</th>
+                  <th>Roll / ID</th>
+                  <th>Assessment Paper</th>
+                  <th>Marks &amp; Score</th>
+                  <th>Anti-Cheat Warnings</th>
+                  <th>Submitted At</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        this.allAttempts.forEach(att => {
+          const percent = Math.round(att.score_percent || 0);
+          const vCount = att.violations_count || 0;
+          const isDisq = Boolean(att.is_disqualified);
+
+          let vBadge = '';
+          if (isDisq) {
+            vBadge = `<span class="badge-warning-count flagged" title="Disqualified: multiple violations">❌ Disqualified (${vCount} violations)</span>`;
+          } else if (vCount > 0) {
+            vBadge = `<span class="badge-warning-count flagged" title="Window switches detected">⚠️ ${vCount} Warning${vCount === 1 ? '' : 's'}</span>`;
+          } else {
+            vBadge = `<span class="badge-warning-count clean">✓ 0 Warnings (Clean)</span>`;
+          }
+
+          let dateStr = att.completed_at;
+          try {
+            const d = new Date(att.completed_at + 'Z');
+            dateStr = d.toLocaleDateString(undefined, {
+              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+          } catch(e) {}
+
+          const netMarks = att.net_marks !== null && att.net_marks !== undefined ? att.net_marks : att.score;
+          const maxMarks = att.max_marks || (att.total_questions * 4);
+
+          tableHtml += `
+            <tr data-attempt-id="${att.attempt_id}">
+              <td>
+                <b style="color:var(--text-primary); font-size:0.9rem;">${this.escapeHtml(att.student_name || 'Anonymous Student')}</b>
+              </td>
+              <td>
+                <code style="color:var(--text-secondary);">${this.escapeHtml(att.student_roll || '—')}</code>
+              </td>
+              <td>
+                <span style="font-weight:500;">${this.escapeHtml(att.quiz_title)}</span>
+              </td>
+              <td>
+                <span style="font-weight:600; color:${netMarks >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'};">${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks}</span>
+                <span style="font-size:0.75rem; color:var(--text-muted); margin-left:4px;">(${percent}%)</span>
+              </td>
+              <td>
+                ${vBadge}
+              </td>
+              <td style="font-size:0.8rem; color:var(--text-muted);">
+                ${dateStr}
+              </td>
+              <td style="text-align:right;">
+                <button class="btn btn-outline btn-sm btn-inspect-sub" data-id="${att.attempt_id}" style="margin-right:4px;">Inspect</button>
+                <button class="btn btn-outline btn-sm btn-del-sub" data-id="${att.attempt_id}" title="Delete Submission" style="color:var(--accent-rose);">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+
+        tableHtml += `</tbody></table></div>`;
+        container.innerHTML = tableHtml;
+
+        container.querySelectorAll('.btn-inspect-sub').forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.inspectAttempt(parseInt(btn.getAttribute('data-id'), 10));
+          });
+        });
+
+        container.querySelectorAll('.btn-del-sub').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const attId = parseInt(btn.getAttribute('data-id'), 10);
+            if (confirm('Are you sure you want to delete this student submission record?')) {
+              try {
+                await API.deleteAttempt(attId);
+                this.showToast('Submission record deleted', 'success');
+                this.showHistory();
+              } catch (err) {
+                this.showToast(`Delete failed: ${err.message}`, 'error');
+              }
+            }
+          });
+        });
+
+        return;
+      }
+
+      // STUDENT VIEW: Candidate's own past attempts
       container.innerHTML = '';
       this.allAttempts.forEach(att => {
         const row = document.createElement('div');
@@ -577,7 +947,6 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           ? `<span class="badge badge-emerald">${percent}% — Passed</span>`
           : `<span class="badge badge-rose">${percent}% — Below 70%</span>`;
 
-        // Format Date
         let dateStr = att.completed_at;
         try {
           const d = new Date(att.completed_at + 'Z');
@@ -588,9 +957,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
             hour: '2-digit',
             minute: '2-digit'
           });
-        } catch (e) {
-          // fallback
-        }
+        } catch (e) {}
 
         const mins = Math.floor((att.time_taken_seconds || 0) / 60);
         const secs = (att.time_taken_seconds || 0) % 60;
@@ -610,7 +977,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         if (isDisqualified) {
           integrityBadgeHtml = `<span class="badge badge-disqualified" title="Disqualified: Exceeded maximum window switches">❌ Disqualified</span>`;
         } else if (vCount > 0) {
-          integrityBadgeHtml = `<span class="badge badge-amber" title="${vCount} window switches detected">⚠️ ${vCount} Security Flag${vCount === 1 ? '' : 's'}</span>`;
+          integrityBadgeHtml = `<span class="badge badge-amber" title="${vCount} window switches detected">⚠️ ${vCount} Warning${vCount === 1 ? '' : 's'}</span>`;
         }
 
         row.innerHTML = `
@@ -621,6 +988,8 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
               ${integrityBadgeHtml}
             </div>
             <div class="history-item-meta">
+              <span>Candidate: <b>${this.escapeHtml(att.student_name || 'Anonymous Student')}</b></span>
+              <span>·</span>
               <span>Completed ${dateStr}</span>
               <span>·</span>
               <span>${att.total_questions} questions</span>
@@ -640,12 +1009,6 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
             ${drillBtnHtml}
             <button class="btn btn-outline btn-sm btn-inspect-att">Review</button>
             <button class="btn btn-outline btn-sm btn-reattempt-att">Reattempt</button>
-            <button class="btn btn-outline btn-sm btn-del-att" title="Delete attempt record">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-            </button>
           </div>
         `;
 
@@ -673,24 +1036,8 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
 
         row.querySelector('.btn-reattempt-att').addEventListener('click', (e) => {
           e.stopPropagation();
-          this.startQuiz(att.quiz_id, 'exam');
+          this.promptCandidateDetails(att.quiz_id, 'exam');
         });
-
-        const delBtn = row.querySelector('.btn-del-att');
-        if (delBtn) {
-          delBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (!confirm(`Delete attempt for "${att.quiz_title}" from history?`)) return;
-            try {
-              await API.deleteAttempt(att.attempt_id);
-              this.showToast('Attempt record deleted', 'success');
-              await this.showHistory();
-              await this.loadDashboardMetrics();
-            } catch (err) {
-              this.showToast(`Failed to delete attempt: ${err.message}`, 'error');
-            }
-          });
-        }
 
         row.addEventListener('click', () => {
           this.inspectAttempt(att.attempt_id);
@@ -699,7 +1046,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         container.appendChild(row);
       });
     } catch (err) {
-      container.innerHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--accent-rose);">Error loading history: ${err.message}</div>`;
+      container.innerHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--accent-rose);">Error loading records: ${err.message}</div>`;
     }
   },
 
@@ -731,7 +1078,8 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       } catch (e) {
         // fallback
       }
-      document.getElementById('detail-timestamp').textContent = `Completed on ${dateStr}`;
+      const candInfo = data.student_name ? `Candidate: ${data.student_name}${data.student_roll ? ` (ID: ${data.student_roll})` : ''} · ` : '';
+      document.getElementById('detail-timestamp').textContent = `${candInfo}Completed on ${dateStr}`;
 
       const posMarks = (data.positive_marks !== undefined && data.positive_marks !== null) ? parseFloat(data.positive_marks) : 4.0;
       const negMarks = (data.negative_marks !== undefined && data.negative_marks !== null) ? parseFloat(data.negative_marks) : 1.0;
@@ -879,7 +1227,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
     this.showToast(`Starting drill: ${missedQuestions.length} missed question${missedQuestions.length > 1 ? 's' : ''}`, 'info');
   },
 
-  async startQuiz(quizId, mode = 'exam') {
+  async startQuiz(quizId, mode = 'exam', candidateInfo = null) {
     try {
       const quiz = await API.getQuiz(quizId);
       if (!quiz || !quiz.questions || quiz.questions.length === 0) {
@@ -887,7 +1235,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         return;
       }
       this.switchView('player');
-      QuizPlayer.startQuiz(quiz, mode);
+      QuizPlayer.startQuiz(quiz, mode, null, candidateInfo);
     } catch (err) {
       this.showToast(`Error starting assessment: ${err.message}`, 'error');
     }

@@ -4,6 +4,44 @@
  */
 
 const API = {
+  _teacherPin: '',
+
+  getTeacherPin() {
+    return sessionStorage.getItem('quiz_teacher_pin') || this._teacherPin || '';
+  },
+
+  setTeacherPin(pin) {
+    this._teacherPin = pin || '';
+    if (pin) {
+      sessionStorage.setItem('quiz_teacher_pin', pin);
+    } else {
+      sessionStorage.removeItem('quiz_teacher_pin');
+    }
+  },
+
+  getHeaders(extra = {}) {
+    const headers = { ...extra };
+    const pin = this.getTeacherPin();
+    if (pin) {
+      headers['X-Teacher-PIN'] = pin;
+    }
+    return headers;
+  },
+
+  async verifyTeacherPin(pin) {
+    const res = await fetch('/api/teacher/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      this.setTeacherPin(pin);
+      return true;
+    }
+    throw new Error(data.error || 'Incorrect Teacher PIN');
+  },
+
   async getQuizzes() {
     const res = await fetch('/api/quizzes');
     if (!res.ok) throw new Error('Failed to fetch quizzes');
@@ -21,7 +59,7 @@ const API = {
   async createQuiz(quizData) {
     const res = await fetch('/api/quizzes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(quizData)
     });
     if (!res.ok) {
@@ -34,7 +72,7 @@ const API = {
   async updateQuiz(id, quizData) {
     const res = await fetch(`/api/quizzes/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(quizData)
     });
     if (!res.ok) {
@@ -46,9 +84,13 @@ const API = {
 
   async deleteQuiz(id) {
     const res = await fetch(`/api/quizzes/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: this.getHeaders()
     });
-    if (!res.ok) throw new Error('Failed to delete quiz');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to delete quiz');
+    }
     return await res.json();
   },
 
@@ -59,6 +101,7 @@ const API = {
 
     const res = await fetch('/api/upload', {
       method: 'POST',
+      headers: this.getHeaders(),
       body: formData
     });
 
@@ -78,7 +121,7 @@ const API = {
           const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')) : '.png';
           const res = await fetch('/api/upload', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ data: reader.result, extension: ext })
           });
           const data = await res.json();
@@ -132,13 +175,19 @@ const API = {
   },
 
   async clearAllAttempts() {
-    const res = await fetch('/api/attempts', { method: 'DELETE' });
+    const res = await fetch('/api/attempts', {
+      method: 'DELETE',
+      headers: this.getHeaders()
+    });
     if (!res.ok) throw new Error('Failed to clear history');
     return await res.json();
   },
 
   async deleteAttempt(attemptId) {
-    const res = await fetch(`/api/attempts/${attemptId}`, { method: 'DELETE' });
+    const res = await fetch(`/api/attempts/${attemptId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
+    });
     if (!res.ok) throw new Error('Failed to delete attempt');
     return await res.json();
   }

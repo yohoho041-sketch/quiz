@@ -9,7 +9,21 @@ import sqlite3
 import json
 from typing import List, Dict, Any, Optional
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quiz.db")
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quiz.db")
+DB_PATH = os.environ.get("DATABASE_PATH")
+
+if not DB_PATH:
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        tmp_db = "/tmp/quiz.db"
+        if not os.path.exists(tmp_db) and os.path.exists(DEFAULT_DB_PATH):
+            import shutil
+            try:
+                shutil.copyfile(DEFAULT_DB_PATH, tmp_db)
+            except Exception:
+                pass
+        DB_PATH = tmp_db
+    else:
+        DB_PATH = DEFAULT_DB_PATH
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -71,6 +85,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         quiz_id INTEGER NOT NULL,
+        student_name TEXT DEFAULT 'Anonymous Student',
+        student_roll TEXT DEFAULT '',
         score INTEGER NOT NULL,
         total_questions INTEGER NOT NULL,
         time_taken_seconds INTEGER DEFAULT 0,
@@ -114,6 +130,10 @@ def init_db():
 
         # attempts table
         att_cols = [c[1] for c in cursor.execute("PRAGMA table_info(attempts)").fetchall()]
+        if "student_name" not in att_cols:
+            cursor.execute("ALTER TABLE attempts ADD COLUMN student_name TEXT DEFAULT 'Anonymous Student'")
+        if "student_roll" not in att_cols:
+            cursor.execute("ALTER TABLE attempts ADD COLUMN student_roll TEXT DEFAULT ''")
         if "positive_score" not in att_cols:
             cursor.execute("ALTER TABLE attempts ADD COLUMN positive_score REAL DEFAULT 0.0")
         if "negative_penalty" not in att_cols:
@@ -375,7 +395,9 @@ def record_attempt(
     max_marks: Optional[float] = None,
     violations_count: int = 0,
     violations_log: Optional[Any] = None,
-    is_disqualified: bool = False
+    is_disqualified: bool = False,
+    student_name: str = "Anonymous Student",
+    student_roll: str = ""
 ) -> int:
     """
     Record a user quiz attempt with full JEE Marking Scheme computation and anti-cheating audit.
@@ -444,12 +466,17 @@ def record_attempt(
     final_max_marks = round(max_marks if max_marks is not None else (total_q_count * pos_marks), 2)
     final_score = calc_correct if (score == 0 and calc_correct > 0) else score
 
+    clean_name = str(student_name or "").strip() or "Anonymous Student"
+    clean_roll = str(student_roll or "").strip()
+
     cursor.execute(
         """INSERT INTO attempts 
-           (quiz_id, score, total_questions, time_taken_seconds, answers_json, positive_score, negative_penalty, net_marks, max_marks, violations_count, violations_log, is_disqualified) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (quiz_id, student_name, student_roll, score, total_questions, time_taken_seconds, answers_json, positive_score, negative_penalty, net_marks, max_marks, violations_count, violations_log, is_disqualified) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             quiz_id,
+            clean_name,
+            clean_roll,
             final_score,
             total_q_count if total_questions == 0 else total_questions,
             time_taken_seconds,
@@ -490,6 +517,8 @@ def list_all_attempts() -> List[Dict[str, Any]]:
     SELECT 
         a.id as attempt_id,
         a.quiz_id,
+        a.student_name,
+        a.student_roll,
         q.title as quiz_title,
         q.category,
         q.positive_marks,
@@ -523,6 +552,8 @@ def get_attempt_detail(attempt_id: int) -> Optional[Dict[str, Any]]:
     SELECT 
         a.id as attempt_id,
         a.quiz_id,
+        a.student_name,
+        a.student_roll,
         q.title as quiz_title,
         q.description as quiz_description,
         q.category,

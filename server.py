@@ -23,6 +23,19 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 
+TEACHER_PIN = os.environ.get("TEACHER_PIN", "2026")
+
+
+def is_teacher_authorized(headers) -> bool:
+    """Validate teacher PIN from X-Teacher-PIN or Authorization header."""
+    pin = headers.get("X-Teacher-PIN") or headers.get("x-teacher-pin")
+    if not pin:
+        auth_hdr = headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            pin = auth_hdr[7:].strip()
+    return bool(pin and pin == TEACHER_PIN)
+
+
 class QuizRequestHandler(BaseHTTPRequestHandler):
     server_version = "QuizApp/1.0"
 
@@ -47,7 +60,7 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Teacher-PIN, Authorization")
         self.end_headers()
 
     def do_GET(self):
@@ -220,8 +233,17 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
             return
 
+        # POST /api/teacher/verify
+        if len(parts) == 3 and parts[1] == "teacher" and parts[2] == "verify":
+            pin = payload.get("pin", "") or self.headers.get("X-Teacher-PIN", "")
+            if str(pin).strip() == TEACHER_PIN:
+                return self.send_json({"success": True, "message": "Teacher verified successfully"})
+            return self.send_error_json("Invalid Teacher PIN", 403)
+
         # POST /api/quizzes
         if len(parts) == 2 and parts[1] == "quizzes":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to create assessments", 403)
             if not payload.get("title", "").strip():
                 return self.send_error_json("Quiz title is required", 400)
             if not payload.get("questions"):
@@ -255,6 +277,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             violations_log = payload.get("violations_log", [])
             is_disqualified = bool(payload.get("is_disqualified", False))
 
+            student_name = payload.get("student_name", "Anonymous Student")
+            student_roll = payload.get("student_roll", "")
+
             attempt_id = database.record_attempt(
                 quiz_id, score, total_questions, time_taken, answers,
                 positive_score=float(pos_score) if pos_score is not None else None,
@@ -263,7 +288,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
                 max_marks=float(max_marks) if max_marks is not None else None,
                 violations_count=violations_count,
                 violations_log=violations_log,
-                is_disqualified=is_disqualified
+                is_disqualified=is_disqualified,
+                student_name=student_name,
+                student_roll=student_roll
             )
             return self.send_json({"success": True, "attempt_id": attempt_id}, status=201)
 
@@ -275,6 +302,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
         parts = [p for p in path.split("/") if p]
 
         if len(parts) == 3 and parts[1] == "quizzes":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to modify assessments", 403)
+
             try:
                 quiz_id = int(parts[2])
             except ValueError:
@@ -305,6 +335,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
         parts = [p for p in path.split("/") if p]
 
         if len(parts) == 3 and parts[1] == "quizzes":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to delete assessments", 403)
+
             try:
                 quiz_id = int(parts[2])
             except ValueError:
@@ -318,11 +351,17 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
         # DELETE /api/attempts (Clear All History)
         if len(parts) == 2 and parts[1] == "attempts":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to clear history", 403)
+
             database.clear_all_attempts()
             return self.send_json({"success": True, "message": "All assessment history cleared successfully"})
 
         # DELETE /api/attempts/<id> (Delete Single Attempt)
         if len(parts) == 3 and parts[1] == "attempts":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to delete attempt records", 403)
+
             try:
                 attempt_id = int(parts[2])
             except ValueError:

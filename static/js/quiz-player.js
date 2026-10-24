@@ -19,10 +19,16 @@ const QuizPlayer = {
   violationsLog: [],
   isDisqualified: false,
   isTimerPaused: false,
+  studentName: 'Anonymous Student',
+  studentRoll: '',
 
-  startQuiz(quiz, mode = 'exam', originalQuiz = null) {
+  startQuiz(quiz, mode = 'exam', originalQuiz = null, studentInfo = null) {
     this.quiz = quiz;
     this.originalQuiz = originalQuiz || quiz;
+    if (studentInfo) {
+      if (studentInfo.name) this.studentName = studentInfo.name.trim();
+      if (studentInfo.roll) this.studentRoll = studentInfo.roll.trim();
+    }
     this.currentIndex = 0;
     this.userAnswers = {};
     this.flaggedQuestions.clear();
@@ -592,6 +598,25 @@ const QuizPlayer = {
     this.hideFullscreenLockModal();
   },
 
+  playSecurityAlertBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(700, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.36);
+    } catch (e) {}
+  },
+
   handleSecurityViolation(type, description) {
     if (this.mode !== 'exam') return;
 
@@ -611,6 +636,7 @@ const QuizPlayer = {
       questionIdx: this.currentIndex + 1
     });
 
+    this.playSecurityAlertBeep();
     this.isTimerPaused = true;
     this.showSecurityWarningModal();
   },
@@ -756,7 +782,9 @@ const QuizPlayer = {
         max_marks: maxMarks,
         violations_count: this.violationsCount,
         violations_log: this.violationsLog,
-        is_disqualified: this.isDisqualified
+        is_disqualified: this.isDisqualified,
+        student_name: this.studentName || 'Anonymous Student',
+        student_roll: this.studentRoll || ''
       });
     } catch (e) {
       console.error('Failed to save attempt record:', e);

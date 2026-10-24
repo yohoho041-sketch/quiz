@@ -93,7 +93,7 @@ class TestQuizApp(unittest.TestCase):
             self.assertEqual(data["quiz"]["id"], quiz_id)
 
     def test_03_api_create_and_delete_quiz(self):
-        """Test POST /api/quizzes and DELETE /api/quizzes/<id>."""
+        """Test teacher PIN authorization for POST /api/quizzes and DELETE /api/quizzes/<id>, plus student attempt metadata."""
         new_quiz = {
             "title": "Automated Test Quiz",
             "description": "Integration test quiz",
@@ -112,23 +112,38 @@ class TestQuizApp(unittest.TestCase):
             ]
         }
         body = json.dumps(new_quiz).encode("utf-8")
-        req = urllib.request.Request(
+
+        # 1. Attempt creation WITHOUT teacher PIN -> Expect 403 Forbidden
+        unauth_req = urllib.request.Request(
             f"{BASE_URL}/api/quizzes",
             data=body,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req) as resp:
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(unauth_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 2. Authorized creation WITH teacher PIN -> Expect 201 Created
+        auth_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=body,
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"}
+        )
+        with urllib.request.urlopen(auth_req) as resp:
             self.assertEqual(resp.status, 201)
             data = json.loads(resp.read().decode("utf-8"))
             created_id = data["quiz"]["id"]
             self.assertEqual(data["quiz"]["title"], "Automated Test Quiz")
 
-        # Record attempt on this quiz
+        # 3. Record student attempt with candidate metadata and violations
         attempt_body = json.dumps({
             "score": 1,
             "total_questions": 1,
             "time_taken_seconds": 15,
-            "answers": {"1": 1}
+            "answers": {"1": 1},
+            "student_name": "Test Candidate Rahul",
+            "student_roll": "ROLL-2026",
+            "violations_count": 2
         }).encode("utf-8")
         att_req = urllib.request.Request(
             f"{BASE_URL}/api/quizzes/{created_id}/attempts",
@@ -137,11 +152,29 @@ class TestQuizApp(unittest.TestCase):
         )
         with urllib.request.urlopen(att_req) as resp:
             self.assertEqual(resp.status, 201)
+            att_data = json.loads(resp.read().decode("utf-8"))
+            attempt_id = att_data["attempt_id"]
 
-        # Delete the quiz
-        del_req = urllib.request.Request(
+        # Verify candidate metadata is persisted
+        detail = database.get_attempt_detail(attempt_id)
+        self.assertEqual(detail["student_name"], "Test Candidate Rahul")
+        self.assertEqual(detail["student_roll"], "ROLL-2026")
+        self.assertEqual(detail["violations_count"], 2)
+
+        # 4. Attempt quiz deletion WITHOUT PIN -> Expect 403 Forbidden
+        del_unauth_req = urllib.request.Request(
             f"{BASE_URL}/api/quizzes/{created_id}",
             method="DELETE"
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(del_unauth_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 5. Delete quiz WITH Teacher PIN -> Expect 200 OK
+        del_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{created_id}",
+            method="DELETE",
+            headers={"X-Teacher-PIN": "2026"}
         )
         with urllib.request.urlopen(del_req) as resp:
             self.assertEqual(resp.status, 200)
@@ -333,7 +366,7 @@ class TestQuizApp(unittest.TestCase):
         req = urllib.request.Request(
             f"{BASE_URL}/api/quizzes",
             data=body,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"}
         )
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 201)
@@ -396,7 +429,7 @@ class TestQuizApp(unittest.TestCase):
         database.delete_quiz(quiz_id)
 
     def test_09_delete_attempts(self):
-        """Test deleting a single attempt and deleting all attempts via API endpoints."""
+        """Test deleting a single attempt and deleting all attempts via API endpoints with teacher authorization."""
         quizzes = database.list_quizzes()
         self.assertGreaterEqual(len(quizzes), 1)
         quiz_id = quizzes[0]["id"]
@@ -407,8 +440,18 @@ class TestQuizApp(unittest.TestCase):
         self.assertIsNotNone(att_id_1)
         self.assertIsNotNone(att_id_2)
 
-        # Delete single attempt
-        req = urllib.request.Request(f"{BASE_URL}/api/attempts/{att_id_1}", method="DELETE")
+        # Delete single attempt without PIN -> Expect 403
+        unauth_req = urllib.request.Request(f"{BASE_URL}/api/attempts/{att_id_1}", method="DELETE")
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(unauth_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # Delete single attempt with PIN -> Expect 200
+        req = urllib.request.Request(
+            f"{BASE_URL}/api/attempts/{att_id_1}",
+            method="DELETE",
+            headers={"X-Teacher-PIN": "2026"}
+        )
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
@@ -419,8 +462,12 @@ class TestQuizApp(unittest.TestCase):
         # Verify att_id_2 still exists
         self.assertIsNotNone(database.get_attempt_detail(att_id_2))
 
-        # Delete all attempts
-        req_all = urllib.request.Request(f"{BASE_URL}/api/attempts", method="DELETE")
+        # Delete all attempts with PIN
+        req_all = urllib.request.Request(
+            f"{BASE_URL}/api/attempts",
+            method="DELETE",
+            headers={"X-Teacher-PIN": "2026"}
+        )
         with urllib.request.urlopen(req_all) as resp_all:
             self.assertEqual(resp_all.status, 200)
             data_all = json.loads(resp_all.read().decode("utf-8"))
@@ -493,7 +540,7 @@ class TestQuizApp(unittest.TestCase):
         req = urllib.request.Request(
             f"{BASE_URL}/api/quizzes",
             data=json.dumps(latex_quiz).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
             method="POST"
         )
         with urllib.request.urlopen(req) as resp:
@@ -512,6 +559,29 @@ class TestQuizApp(unittest.TestCase):
 
         # Clean up
         database.delete_quiz(quiz_id)
+
+    def test_11_teacher_verify_endpoint(self):
+        """Test POST /api/teacher/verify with invalid and valid PINs."""
+        # 1. Invalid PIN -> 403 Forbidden
+        bad_req = urllib.request.Request(
+            f"{BASE_URL}/api/teacher/verify",
+            data=json.dumps({"pin": "wrong-pin"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(bad_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 2. Valid PIN -> 200 OK
+        good_req = urllib.request.Request(
+            f"{BASE_URL}/api/teacher/verify",
+            data=json.dumps({"pin": "2026"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(good_req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["success"])
 
 
 if __name__ == "__main__":

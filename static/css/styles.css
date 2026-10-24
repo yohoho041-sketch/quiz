@@ -2777,3 +2777,93 @@ body.exam-lockdown-active .quiz-panel {
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.35);
 }
+
+/* ==================== STUDENT PORTAL & TEACHER CONTROLS ==================== */
+.brand-portal-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  background-color: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.brand-portal-tag.teacher-active {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.teacher-mode-banner {
+  display: none;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.05) 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 0.45rem 1.5rem;
+  font-size: 0.8rem;
+  color: #fcd34d;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.teacher-mode-banner.active {
+  display: flex;
+}
+
+.submissions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.submissions-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  background-color: var(--bg-surface-elevated);
+}
+
+.submissions-table td {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.submissions-table tr:hover td {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.badge-warning-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+}
+
+.badge-warning-count.clean {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-warning-count.flagged {
+  background-color: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}

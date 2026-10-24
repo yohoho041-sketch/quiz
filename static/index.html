@@ -12,7 +12,7 @@
   <!-- Navigation Bar -->
   <nav class="navbar">
     <div class="nav-left">
-      <div class="brand" id="nav-brand">
+      <div class="brand" id="nav-brand" style="cursor:pointer;">
         <div class="brand-logo-wrap">
           <svg class="brand-logo" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"/>
@@ -22,6 +22,7 @@
           </svg>
         </div>
         <span class="brand-name">QuizMaster</span>
+        <span class="brand-portal-tag" id="nav-portal-tag">Student Portal</span>
       </div>
 
       <!-- Segmented Navigation Switcher -->
@@ -33,14 +34,14 @@
             <rect x="14" y="14" width="7" height="7"/>
             <rect x="3" y="14" width="7" height="7"/>
           </svg>
-          <span>Assessments</span>
+          <span id="tab-assessments-label">Assignments</span>
         </button>
         <button class="nav-tab" id="tab-history">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Test History</span>
+          <span id="history-tab-label">My Attempts</span>
           <span class="tab-count-badge" id="history-count-badge">0</span>
         </button>
       </div>
@@ -56,7 +57,18 @@
         </svg>
         <span id="fs-btn-label">Fullscreen</span>
       </button>
-      <button class="btn btn-primary btn-sm" id="btn-nav-create">
+
+      <!-- Teacher Access Button -->
+      <button class="btn btn-outline btn-sm" id="btn-teacher-toggle" title="Teacher Authentication">
+        <svg id="teacher-lock-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span id="teacher-toggle-label">Teacher Login</span>
+      </button>
+
+      <!-- New Assessment button: Hidden by default for students -->
+      <button class="btn btn-primary btn-sm" id="btn-nav-create" style="display:none;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
@@ -71,6 +83,17 @@
       </button>
     </div>
   </nav>
+
+  <!-- Teacher Mode Active Status Banner -->
+  <div class="teacher-mode-banner" id="teacher-mode-banner">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span><b>Teacher Mode Active:</b> You have full authority to create, edit, delete assessments, and review student attempt scores.</span>
+    </div>
+    <button class="btn btn-outline btn-sm" id="btn-teacher-logout" style="padding:0.25rem 0.75rem; font-size:0.75rem; border-color:rgba(245, 158, 11, 0.4); color:#fbbf24;">
+      Switch to Student View
+    </button>
+  </div>
 
   <!-- Main Container -->
   <main class="container">
@@ -788,6 +811,72 @@ Explanation: UDP is connectionless and does not guarantee packet ordering."></te
           <button type="button" class="btn btn-outline" id="btn-quick-import-cancel">Cancel</button>
           <button type="button" class="btn btn-primary" id="btn-quick-import-apply">Parse &amp; Import</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Entry Modal -->
+  <div class="modal-overlay" id="student-entry-modal" style="z-index: 998;">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="student-modal-quiz-title">Assessment Candidate Entry</h3>
+          <p class="modal-subtitle">Enter your candidate information to begin this examination.</p>
+        </div>
+        <button class="modal-close" id="student-entry-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" for="student-input-name" style="font-weight: 600; color: var(--text-primary);">Student Full Name <span style="color:var(--accent-rose);">*</span></label>
+          <input type="text" id="student-input-name" class="form-control" placeholder="e.g. Rahul Sharma" required autofocus autocomplete="name">
+        </div>
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" for="student-input-roll" style="font-weight: 600; color: var(--text-primary);">Roll Number / Student ID <span style="color:var(--accent-rose);">*</span></label>
+          <input type="text" id="student-input-roll" class="form-control" placeholder="e.g. 2026-CS-041" required autocomplete="off">
+        </div>
+
+        <div style="background: rgba(244, 63, 94, 0.08); border: 1px solid rgba(244, 63, 94, 0.25); border-radius: var(--radius-md); padding: 1rem; margin-top: 1rem;">
+          <div style="display:flex; align-items:center; gap:8px; font-weight:700; color:var(--accent-rose); font-size:0.875rem; margin-bottom:0.4rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Strict Anti-Cheating &amp; Integrity Rules</span>
+          </div>
+          <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+            <li>Test will open in <b>Fullscreen Mode</b>.</li>
+            <li>Switching tabs, minimizing browser, or opening other apps triggers an <b>immediate warning</b>.</li>
+            <li>All tab switches and warnings are recorded and submitted to your teacher with your score.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:0.75rem;">
+        <button type="button" class="btn btn-outline" id="btn-student-entry-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-student-entry-start">
+          <span>Start Assessment</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Teacher PIN Unlock Modal -->
+  <div class="modal-overlay" id="teacher-login-modal" style="z-index: 1001;">
+    <div class="modal-dialog" style="max-width: 400px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Teacher Authentication</h3>
+          <p class="modal-subtitle">Enter teacher master PIN to create or manage assessments.</p>
+        </div>
+        <button class="modal-close" id="teacher-login-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div class="form-group">
+          <label class="form-label" for="teacher-pin-input" style="font-weight: 600;">Teacher PIN</label>
+          <input type="password" id="teacher-pin-input" class="form-control" placeholder="Enter PIN (Default: 2026)" maxlength="20" autofocus autocomplete="off">
+          <p id="teacher-pin-error" style="display:none; color:var(--accent-rose); font-size:0.8rem; margin-top:0.4rem;"></p>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:0.75rem;">
+        <button type="button" class="btn btn-outline" id="btn-teacher-login-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-teacher-login-submit">Unlock Teacher Mode</button>
       </div>
     </div>
   </div>
