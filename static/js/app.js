@@ -1029,10 +1029,14 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
   async showHistory() {
     this.switchView('history');
     const container = document.getElementById('history-list');
+    const chartCard = document.getElementById('student-performance-card');
+    if (chartCard) chartCard.style.display = 'none';
+
     container.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading records...</div>';
 
     // If student mode and not logged in with PIN, prompt to log in
     if (!this.isTeacherMode && !this.getStudentPin()) {
+      if (chartCard) chartCard.style.display = 'none';
       container.innerHTML = `
         <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
           <div style="font-size: 2.25rem; margin-bottom: 0.75rem;">🔒</div>
@@ -1058,6 +1062,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       }
 
       if (this.allAttempts.length === 0) {
+        if (chartCard) chartCard.style.display = 'none';
         const studentName = this.getStudentName();
         const pin = this.getStudentPin();
         const greeting = studentName ? `for ${studentName}` : (pin ? `for Student #${pin}` : '');
@@ -1073,6 +1078,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
 
       // TEACHER VIEW: Submissions & Integrity Audit Table
       if (this.isTeacherMode) {
+        if (chartCard) chartCard.style.display = 'none';
         let tableHtml = `
           <div style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
             <div style="font-size:0.875rem; color:var(--text-secondary);">
@@ -1179,6 +1185,8 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       }
 
       // STUDENT VIEW: Candidate's own past attempts
+      this.renderPerformanceChart(this.allAttempts);
+
       container.innerHTML = '';
       this.allAttempts.forEach(att => {
         const row = document.createElement('div');
@@ -1291,6 +1299,258 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
     } catch (err) {
       container.innerHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--accent-rose);">Error loading records: ${err.message}</div>`;
     }
+  },
+
+  renderPerformanceChart(attempts) {
+    const card = document.getElementById('student-performance-card');
+    if (!card || !attempts || attempts.length === 0 || this.isTeacherMode) {
+      if (card) card.style.display = 'none';
+      return;
+    }
+
+    // Chronological order: oldest attempt first (index 0) to newest attempt (index N - 1)
+    const chronological = [...attempts].reverse();
+    const count = chronological.length;
+
+    // Summary statistics
+    const latestScore = Math.round(chronological[count - 1].score_percent || 0);
+    const previousScore = count > 1 ? Math.round(chronological[count - 2].score_percent || 0) : null;
+    const avgScore = Math.round(chronological.reduce((acc, a) => acc + (a.score_percent || 0), 0) / count);
+    const maxScore = Math.round(Math.max(...chronological.map(a => a.score_percent || 0)));
+
+    let trendBadge = '';
+    if (previousScore !== null) {
+      const diff = latestScore - previousScore;
+      if (diff > 0) {
+        trendBadge = `<span style="color:var(--accent-emerald); font-weight:700;">↑ +${diff}%</span>`;
+      } else if (diff < 0) {
+        trendBadge = `<span style="color:var(--accent-rose); font-weight:700;">↓ ${diff}%</span>`;
+      } else {
+        trendBadge = `<span style="color:var(--text-muted); font-weight:700;">= 0%</span>`;
+      }
+    }
+
+    // SVG Layout Dimensions
+    const W = 800;
+    const H = 260;
+    const padL = 58;
+    const padR = 40;
+    const padT = 32;
+    const padB = 58;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+
+    // Y scale: 0% at bottom (padT + plotH), 100% at top (padT)
+    const getY = (pct) => {
+      const clamped = Math.max(0, Math.min(100, pct));
+      return padT + plotH - (clamped / 100) * plotH;
+    };
+
+    // X scale: attempt positions
+    const getX = (idx) => {
+      if (count === 1) return padL + plotW / 2;
+      return padL + (idx / (count - 1)) * plotW;
+    };
+
+    // Build Y-axis gridlines and labels
+    const yTicks = [0, 25, 50, 75, 100];
+    let yGridHtml = '';
+    yTicks.forEach(val => {
+      const y = getY(val);
+      const isBase = val === 0;
+      yGridHtml += `
+        <line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" 
+              stroke="${isBase ? 'var(--border-default)' : 'var(--border-subtle)'}" 
+              stroke-width="${isBase ? 1.5 : 1}" 
+              stroke-dasharray="${isBase ? 'none' : '3,3'}" />
+        <text x="${padL - 10}" y="${y + 4}" text-anchor="end" fill="var(--text-muted)" font-size="11" font-family="var(--font-mono)">${val}%</text>
+      `;
+    });
+
+    // 70% Target threshold guide line
+    const y70 = getY(70);
+    const targetGuideHtml = `
+      <line x1="${padL}" y1="${y70}" x2="${W - padR}" y2="${y70}" 
+            stroke="var(--accent-emerald)" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.65" />
+      <text x="${W - padR}" y="${y70 - 6}" text-anchor="end" fill="var(--accent-emerald)" font-size="10" font-weight="600" opacity="0.85">70% TARGET</text>
+    `;
+
+    // Coordinates of all attempt points
+    const points = chronological.map((att, i) => {
+      const pct = att.score_percent !== null && att.score_percent !== undefined ? att.score_percent : (att.score / (att.total_questions || 1) * 100);
+      return {
+        att,
+        index: i,
+        score: Math.round(pct),
+        x: Math.round(getX(i) * 10) / 10,
+        y: Math.round(getY(pct) * 10) / 10
+      };
+    });
+
+    // Path Line and Gradient Area
+    let linePathD = '';
+    let areaPathD = '';
+    if (count > 1) {
+      linePathD = `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`;
+      const baseY = padT + plotH;
+      areaPathD = `M ${points[0].x},${baseY} L ${points.map(p => `${p.x},${p.y}`).join(' L ')} L ${points[points.length - 1].x},${baseY} Z`;
+    } else if (count === 1) {
+      linePathD = `M ${padL},${points[0].y} L ${W - padR},${points[0].y}`;
+    }
+
+    // X-Axis baseline and ticks
+    let xTicksHtml = '';
+    points.forEach((p, idx) => {
+      let dateLabel = 'Att #' + (idx + 1);
+      try {
+        const d = new Date(p.att.completed_at.replace(' ', 'T') + 'Z');
+        dateLabel = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      } catch (e) {
+        dateLabel = (p.att.completed_at || '').split(' ')[0] || ('#' + (idx + 1));
+      }
+
+      xTicksHtml += `
+        <line x1="${p.x}" y1="${padT + plotH}" x2="${p.x}" y2="${padT + plotH + 5}" stroke="var(--border-default)" stroke-width="1.2" />
+        <text x="${p.x}" y="${padT + plotH + 18}" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-weight="600">Att #${idx + 1}</text>
+        <text x="${p.x}" y="${padT + plotH + 32}" text-anchor="middle" fill="var(--text-muted)" font-size="10">${dateLabel}</text>
+      `;
+    });
+
+    // Data points & interactive hover targets
+    let pointsHtml = '';
+    points.forEach(p => {
+      const isPassed = p.score >= 70;
+      const pointColor = isPassed ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+
+      pointsHtml += `
+        <g class="chart-point-target" data-idx="${p.index}" tabindex="0">
+          <circle cx="${p.x}" cy="${p.y}" r="8" fill="${pointColor}" class="point-halo" opacity="0.2" />
+          <circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${pointColor}" stroke="var(--bg-canvas)" stroke-width="2" />
+          <text x="${p.x}" y="${p.y - 10}" text-anchor="middle" fill="${pointColor}" font-size="10.5" font-weight="700" font-family="var(--font-mono)">${p.score}%</text>
+          <circle cx="${p.x}" cy="${p.y}" r="18" fill="transparent" class="point-hitbox" />
+        </g>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="chart-header-row">
+        <div class="chart-title-area">
+          <div class="chart-icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+              <polyline points="17 6 23 6 23 12"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="chart-title-text">Performance Trajectory</h3>
+            <p class="chart-subtitle-text">Test score % progression across chronological attempts</p>
+          </div>
+        </div>
+
+        <div class="chart-stats-pills">
+          <div class="chart-pill">
+            <span class="chart-pill-key">Latest:</span>
+            <span class="chart-pill-val" style="color:${latestScore >= 70 ? 'var(--accent-emerald)' : 'var(--accent-rose)'};">${latestScore}%</span>
+            ${trendBadge ? `<span style="font-size:0.75rem; margin-left:2px;">${trendBadge}</span>` : ''}
+          </div>
+          <div class="chart-pill">
+            <span class="chart-pill-key">Average:</span>
+            <span class="chart-pill-val">${avgScore}%</span>
+          </div>
+          <div class="chart-pill">
+            <span class="chart-pill-key">Highest:</span>
+            <span class="chart-pill-val" style="color:var(--accent-emerald);">${maxScore}%</span>
+          </div>
+          <div class="chart-pill">
+            <span class="chart-pill-key">Total Tests:</span>
+            <span class="chart-pill-val">${count}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-svg-container" id="chart-svg-container">
+        <div class="chart-tooltip" id="perf-chart-tooltip"></div>
+        <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="perfGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent-emerald)" stop-opacity="0.25" />
+              <stop offset="100%" stop-color="var(--accent-emerald)" stop-opacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          <!-- Y-Axis Title -->
+          <text transform="rotate(-90)" x="${-(padT + plotH / 2)}" y="16" fill="var(--text-muted)" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="0.06em">SCORE (%)</text>
+
+          <!-- Grid Lines & Labels -->
+          ${yGridHtml}
+          ${targetGuideHtml}
+
+          <!-- Area & Line Graph -->
+          ${areaPathD ? `<path d="${areaPathD}" fill="url(#perfGradient)" />` : ''}
+          ${count > 1 ? `<path d="${linePathD}" fill="none" stroke="var(--accent-emerald)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />` : ''}
+          ${count === 1 ? `<path d="${linePathD}" fill="none" stroke="rgba(16, 185, 129, 0.4)" stroke-width="1.5" stroke-dasharray="4,4" />` : ''}
+
+          <!-- X-Axis Baseline & Ticks -->
+          <line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="var(--border-default)" stroke-width="1.5" />
+          ${xTicksHtml}
+
+          <!-- Data Points -->
+          ${pointsHtml}
+        </svg>
+      </div>
+    `;
+
+    card.style.display = 'block';
+
+    // Interactive Tooltip Binding
+    const svgContainer = card.querySelector('#chart-svg-container');
+    const tooltip = card.querySelector('#perf-chart-tooltip');
+
+    card.querySelectorAll('.chart-point-target').forEach(el => {
+      const idx = parseInt(el.getAttribute('data-idx'), 10);
+      const p = points[idx];
+      if (!p) return;
+
+      const showTip = () => {
+        let dateStr = p.att.completed_at || '';
+        try {
+          const d = new Date(p.att.completed_at.replace(' ', 'T') + 'Z');
+          dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch(e) {}
+
+        const netMarks = p.att.net_marks !== null && p.att.net_marks !== undefined ? p.att.net_marks : p.att.score;
+        const maxMarks = p.att.max_marks || (p.att.total_questions * 4);
+        const isPassed = p.score >= 70;
+
+        tooltip.innerHTML = `
+          <div class="chart-tooltip-title">${this.escapeHtml(p.att.quiz_title || 'Assessment')}</div>
+          <div class="chart-tooltip-meta">
+            <span style="font-weight:700; color:${isPassed ? 'var(--accent-emerald)' : 'var(--accent-rose)'};">${p.score}% (${isPassed ? 'Passed' : 'Needs Review'})</span>
+            <span>·</span>
+            <span>${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks} Marks</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:3px;">Attempt #${idx + 1} · ${dateStr}</div>
+        `;
+
+        const leftPercent = (p.x / W) * 100;
+        const topPercent = (p.y / H) * 100;
+
+        tooltip.style.left = `${leftPercent}%`;
+        tooltip.style.top = `${topPercent}%`;
+        tooltip.style.display = 'block';
+        tooltip.style.opacity = '1';
+      };
+
+      const hideTip = () => {
+        tooltip.style.display = 'none';
+        tooltip.style.opacity = '0';
+      };
+
+      el.addEventListener('mouseenter', showTip);
+      el.addEventListener('focus', showTip);
+      el.addEventListener('mouseleave', hideTip);
+      el.addEventListener('blur', hideTip);
+    });
   },
 
   async inspectAttempt(attemptId) {

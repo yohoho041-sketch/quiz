@@ -642,6 +642,145 @@ body {
   align-items: center;
 }
 
+/* ==================== STUDENT PERFORMANCE LINE CHART ==================== */
+.performance-chart-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  box-shadow: var(--shadow-card);
+  position: relative;
+}
+
+.chart-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.chart-title-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chart-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-emerald);
+}
+
+.chart-title-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chart-subtitle-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0.15rem 0 0 0;
+}
+
+.chart-stats-pills {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.chart-pill {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.chart-pill-val {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.chart-pill-key {
+  color: var(--text-muted);
+}
+
+.chart-svg-container {
+  width: 100%;
+  overflow-x: auto;
+  position: relative;
+  background: rgba(12, 13, 15, 0.5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hairline);
+  padding: 0.5rem 0;
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  min-width: 620px;
+  display: block;
+  overflow: visible;
+}
+
+.chart-point-target {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.chart-point-target:hover circle.point-halo {
+  r: 12;
+  opacity: 0.45;
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  transition: opacity 0.15s ease;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+  white-space: nowrap;
+  display: none;
+}
+
+.chart-tooltip-title {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-tooltip-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+}
+
 /* ==================== PAST TESTS HISTORY ==================== */
 .history-table-container {
   background-color: var(--bg-surface);
