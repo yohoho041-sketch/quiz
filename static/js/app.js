@@ -17,6 +17,7 @@ const App = {
     this.bindGlobalEvents();
     this.bindTeacherAndCandidateEvents();
     this.updateTeacherModeUI();
+    this.updateStudentNavDisplay();
     this.showDashboard();
     this.refreshHistoryBadge();
 
@@ -97,12 +98,21 @@ const App = {
     const btnStudentCancel = document.getElementById('btn-student-entry-cancel');
     const btnStudentClose = document.getElementById('student-entry-close');
     const btnStudentStart = document.getElementById('btn-student-entry-start');
+    const studentPinInput = document.getElementById('student-input-pin');
     const studentNameInput = document.getElementById('student-input-name');
     const studentRollInput = document.getElementById('student-input-roll');
 
     if (btnStudentCancel) btnStudentCancel.addEventListener('click', () => this.closeStudentEntryModal());
     if (btnStudentClose) btnStudentClose.addEventListener('click', () => this.closeStudentEntryModal());
     if (btnStudentStart) btnStudentStart.addEventListener('click', () => this.startExamWithCandidateInfo());
+    if (studentPinInput) {
+      studentPinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (studentNameInput) studentNameInput.focus();
+        }
+      });
+    }
     if (studentNameInput) {
       studentNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -216,33 +226,73 @@ const App = {
     }
   },
 
+  getStudentPin() {
+    return localStorage.getItem('quiz_student_pin') || '';
+  },
+
+  getStudentName() {
+    return localStorage.getItem('quiz_student_name') || '';
+  },
+
+  getStudentRoll() {
+    return localStorage.getItem('quiz_student_roll') || '';
+  },
+
+  updateStudentNavDisplay() {
+    const label = document.getElementById('nav-student-label');
+    const pin = this.getStudentPin();
+    const name = this.getStudentName();
+    if (label) {
+      if (pin && name) {
+        label.textContent = `${name.split(' ')[0]} (#${pin})`;
+      } else if (pin) {
+        label.textContent = `Student #${pin}`;
+      } else {
+        label.textContent = 'Student Login';
+      }
+    }
+  },
+
+  openStudentLoginModal(quizId = null) {
+    this.pendingQuizIdForExam = quizId;
+    const modal = document.getElementById('student-entry-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('student-modal-quiz-title');
+    if (titleEl) {
+      if (quizId) {
+        const q = this.allQuizzes.find(x => x.id === quizId);
+        titleEl.textContent = q ? `${q.title} — Candidate Login` : 'Assessment Candidate Entry';
+      } else {
+        titleEl.textContent = 'Student Login (6-Digit PIN)';
+      }
+    }
+
+    const pinInput = document.getElementById('student-input-pin');
+    const nameInput = document.getElementById('student-input-name');
+    const rollInput = document.getElementById('student-input-roll');
+
+    if (pinInput) pinInput.value = this.getStudentPin();
+    if (nameInput) nameInput.value = this.getStudentName();
+    if (rollInput) rollInput.value = this.getStudentRoll();
+
+    modal.classList.add('active');
+    setTimeout(() => {
+      if (pinInput && !pinInput.value) {
+        pinInput.focus();
+      } else if (nameInput) {
+        nameInput.focus();
+        if (nameInput.value) nameInput.select();
+      }
+    }, 100);
+  },
+
   promptCandidateDetails(quizId, mode = 'exam') {
     if (mode !== 'exam') {
       this.startQuiz(quizId, mode);
       return;
     }
-    this.pendingQuizIdForExam = quizId;
-    const modal = document.getElementById('student-entry-modal');
-    if (!modal) {
-      this.startQuiz(quizId, mode);
-      return;
-    }
-    const q = this.allQuizzes.find(x => x.id === quizId);
-    const titleEl = document.getElementById('student-modal-quiz-title');
-    if (titleEl && q) {
-      titleEl.textContent = `${q.title} — Candidate Verification`;
-    }
-    const nameInput = document.getElementById('student-input-name');
-    const rollInput = document.getElementById('student-input-roll');
-    if (nameInput) nameInput.value = localStorage.getItem('quiz_student_name') || '';
-    if (rollInput) rollInput.value = localStorage.getItem('quiz_student_roll') || '';
-    modal.classList.add('active');
-    setTimeout(() => {
-      if (nameInput) {
-        nameInput.focus();
-        if (nameInput.value) nameInput.select();
-      }
-    }, 100);
+    this.openStudentLoginModal(quizId);
   },
 
   closeStudentEntryModal() {
@@ -251,10 +301,19 @@ const App = {
   },
 
   startExamWithCandidateInfo() {
+    const pinInput = document.getElementById('student-input-pin');
     const nameInput = document.getElementById('student-input-name');
     const rollInput = document.getElementById('student-input-roll');
+
+    const pin = (pinInput ? pinInput.value : '').trim();
     const name = (nameInput ? nameInput.value : '').trim();
     const roll = (rollInput ? rollInput.value : '').trim();
+
+    if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+      this.showToast('Please enter a valid 6-digit PIN (e.g. 123456)', 'warning');
+      if (pinInput) pinInput.focus();
+      return;
+    }
 
     if (!name) {
       this.showToast('Please enter your full name to begin', 'warning');
@@ -262,14 +321,22 @@ const App = {
       return;
     }
 
+    localStorage.setItem('quiz_student_pin', pin);
     localStorage.setItem('quiz_student_name', name);
-    localStorage.setItem('quiz_student_roll', roll);
+    localStorage.setItem('quiz_student_roll', roll || pin);
+    this.updateStudentNavDisplay();
     this.closeStudentEntryModal();
+    this.showToast(`Logged in as ${name} (PIN: ${pin})`, 'success');
+    this.updateWeakSpotBanner();
 
     if (this.pendingQuizIdForExam) {
       const qid = this.pendingQuizIdForExam;
       this.pendingQuizIdForExam = null;
-      this.startQuiz(qid, 'exam', { name, roll });
+      if (qid === 'weak_spot_custom') {
+        this.startWeakSpotRevisionTest();
+      } else {
+        this.startQuiz(qid, 'exam', { name, roll: roll || pin });
+      }
     }
   },
 
@@ -281,6 +348,14 @@ const App = {
     document.getElementById('tab-history').addEventListener('click', () => {
       this.showHistory();
     });
+
+    // Student PIN Login button in top nav
+    const btnStudentLogin = document.getElementById('btn-student-pin-login');
+    if (btnStudentLogin) {
+      btnStudentLogin.addEventListener('click', () => {
+        this.openStudentLoginModal(null);
+      });
+    }
 
     // 1-Click Adaptive Weak-Spot Revision Test
     const btnWeakSpot = document.getElementById('btn-start-weak-spot-test');
@@ -745,6 +820,13 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
   },
 
   async startWeakSpotRevisionTest() {
+    const studentPin = this.getStudentPin();
+    if (!studentPin) {
+      this.showToast('Please enter your 6-digit Student PIN to access your personal revision pool', 'info');
+      this.openStudentLoginModal('weak_spot_custom');
+      return;
+    }
+
     this.showToast('Assembling targeted revision test...', 'info');
     try {
       const pool = await this.getWeakSpotPool();
@@ -775,7 +857,10 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       };
 
       this.switchView('player');
-      QuizPlayer.startQuiz(customQuiz, 'exam');
+      QuizPlayer.startQuiz(customQuiz, 'exam', null, {
+        name: this.getStudentName() || 'Anonymous Student',
+        roll: this.getStudentRoll() || studentPin
+      });
       this.showToast(`Starting revision test with ${selectedQuestions.length} questions!`, 'success');
     } catch (err) {
       this.showToast(`Error creating revision test: ${err.message}`, 'error');

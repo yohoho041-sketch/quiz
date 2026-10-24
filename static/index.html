@@ -57,6 +57,15 @@
         <span id="fs-btn-label">Fullscreen</span>
       </button>
 
+      <!-- Student Profile / PIN Switch Button -->
+      <button class="btn btn-secondary btn-sm" id="btn-student-pin-login" title="Login with Student 6-digit PIN">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span id="nav-student-label">Student Login</span>
+      </button>
+
       <!-- Teacher Access Button (Hidden from students by default, unlocked via triple-click, shortcut, or ?teacher=1) -->
       <button class="btn btn-outline btn-sm" id="btn-teacher-toggle" title="Teacher Authentication" style="display:none;">
         <svg id="teacher-lock-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -847,6 +856,13 @@ Explanation: UDP is connectionless and does not guarantee packet ordering."></te
         <button class="modal-close" id="student-entry-close" title="Close (Esc)">✕</button>
       </div>
       <div class="modal-body" style="padding: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" for="student-input-pin" style="font-weight: 600; color: var(--text-primary); display:flex; justify-content:space-between;">
+            <span>Student 6-Digit PIN <span style="color:var(--accent-rose);">*</span></span>
+            <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">Personalizes your revision pool</span>
+          </label>
+          <input type="text" id="student-input-pin" class="form-control" placeholder="e.g. 123456" maxlength="6" pattern="[0-9]{6}" required autocomplete="off" style="font-family:var(--font-mono); letter-spacing:0.25em; font-size:1.1rem; text-align:center;">
+        </div>
         <div class="form-group" style="margin-bottom: 1.25rem;">
           <label class="form-label" for="student-input-name" style="font-weight: 600; color: var(--text-primary);">Student Full Name <span style="color:var(--accent-rose);">*</span></label>
           <input type="text" id="student-input-name" class="form-control" placeholder="e.g. Rahul Sharma" required autofocus autocomplete="name">
