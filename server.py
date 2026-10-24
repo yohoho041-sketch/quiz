@@ -94,6 +94,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Teacher-PIN, Authorization")
         self.end_headers()
 
+    def do_HEAD(self):
+        return self.do_GET()
+
     def do_GET(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
