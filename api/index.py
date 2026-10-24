@@ -27,6 +27,8 @@ from server import QuizRequestHandler
 
 # Run DB schema checks and migrations on serverless cold boot
 try:
+    if os.environ.get("TURSO_DATABASE_URL"):
+        sys.stderr.write("Vercel Serverless: Connecting to Turso cloud database\n")
     database.init_db()
 except Exception as e:
     sys.stderr.write(f"Vercel DB initialization notice: {e}\n")
