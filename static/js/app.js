@@ -713,6 +713,16 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       // ignore
     }
 
+    // Exclude any questions that the student has since mastered (answered correctly in revision)
+    try {
+      const masteredIds = new Set(JSON.parse(localStorage.getItem('quiz_mastered_question_ids') || '[]'));
+      for (const qid of masteredIds) {
+        pool.delete(qid);
+        pool.delete(Number(qid));
+        pool.delete(String(qid));
+      }
+    } catch (e) {}
+
     return Array.from(pool.values());
   },
 
@@ -1476,6 +1486,38 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       statusBadge.className = 'badge badge-rose';
       circle.style.borderColor = 'var(--accent-rose)';
     }
+
+    // Automatically remove any question answered correctly in this test from the weak-spot pool
+    try {
+      const masteredIds = JSON.parse(localStorage.getItem('quiz_mastered_question_ids') || '[]');
+      let masteredSet = new Set(masteredIds);
+      (data.quiz.questions || []).forEach(q => {
+        const userVal = data.userAnswers[q.id] !== undefined ? data.userAnswers[q.id] : data.userAnswers[String(q.id)];
+        let isCorrect = false;
+        if (q.question_type === 'integer') {
+          const hasAnswered = userVal !== undefined && userVal !== null && String(userVal).trim() !== '';
+          const corrVal = q.correct_numerical_value;
+          const tol = parseFloat(q.numerical_tolerance || 0);
+          try {
+            isCorrect = hasAnswered && (corrVal !== null && corrVal !== undefined) && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol;
+          } catch (e) {
+            isCorrect = false;
+          }
+        } else {
+          const hasAnswered = userVal !== undefined && userVal !== null;
+          const correctOpt = (q.options || []).find(o => o.is_correct);
+          isCorrect = hasAnswered && correctOpt && userVal === correctOpt.id;
+        }
+
+        if (isCorrect) {
+          masteredSet.add(q.id);
+        } else {
+          // If answered wrong again, keep it in the weak pool (remove from mastered)
+          masteredSet.delete(q.id);
+        }
+      });
+      localStorage.setItem('quiz_mastered_question_ids', JSON.stringify(Array.from(masteredSet)));
+    } catch (e) {}
 
     // Configure Drill Missed button
     const missedQuestions = (data.quiz.questions || []).filter(q => {
