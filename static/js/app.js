@@ -37,7 +37,6 @@ const App = {
     const historyTabLabel = document.getElementById('history-tab-label');
 
     if (this.isTeacherMode) {
-      if (navPortalTag) navPortalTag.style.display = 'none';
       if (btnNavCreate) btnNavCreate.style.display = 'inline-flex';
       if (btnTeacherToggle) btnTeacherToggle.style.display = 'inline-flex';
       if (teacherBanner) teacherBanner.classList.remove('active');
@@ -47,11 +46,6 @@ const App = {
       }
       if (historyTabLabel) historyTabLabel.textContent = 'Submissions';
     } else {
-      if (navPortalTag) {
-        navPortalTag.style.display = 'inline-block';
-        navPortalTag.textContent = 'Student Portal';
-        navPortalTag.className = 'brand-portal-tag';
-      }
       if (btnNavCreate) btnNavCreate.style.display = 'none';
       if (btnTeacherToggle) btnTeacherToggle.style.display = 'none'; // Completely hidden for students!
       if (teacherBanner) teacherBanner.classList.remove('active');
