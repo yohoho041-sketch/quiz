@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuizMaster — Professional Assessment Platform</title>
+  <link rel="stylesheet" href="/static/vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.6">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <div class="brand" id="nav-brand">
+        <div class="brand-logo-wrap">
+          <svg class="brand-logo" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M16.5 16.5L21 21"/>
+            <path d="M11 7v8"/>
+            <path d="M7 11h8"/>
+          </svg>
+        </div>
+        <span class="brand-name">QuizMaster</span>
+      </div>
+
+      <!-- Segmented Navigation Switcher -->
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-assessments">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <span>Assessments</span>
+        </button>
+        <button class="nav-tab" id="tab-history">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Test History</span>
+          <span class="tab-count-badge" id="history-count-badge">0</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <button class="btn btn-secondary btn-sm" id="btn-toggle-fullscreen" title="Toggle Fullscreen (F11)">
+        <svg id="fs-icon-enter" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+        <svg id="fs-icon-exit" style="display:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+        </svg>
+        <span id="fs-btn-label">Fullscreen</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-nav-create">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>New Assessment</span>
+      </button>
+      <button class="btn-app-close" id="btn-app-close" onclick="App.closeApplication()" title="Close Application" aria-label="Close Application" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; border-radius:6px; background-color:#1a1b20; border:1px solid #2a2c35; color:#a1a1aa; cursor:pointer; outline:none; -webkit-appearance:none; appearance:none; transition:all 0.15s ease;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- ==================== VIEW 1: DASHBOARD / ASSESSMENTS ==================== -->
+    <section id="view-dashboard" class="view active">
+      <div class="section-header">
+        <div>
+          <h1 class="page-heading">Assessments</h1>
+          <p class="page-subheading">Select an assessment to test your knowledge or practice with instant feedback.</p>
+        </div>
+      </div>
+
+      <!-- Minimalist Metrics Ribbon -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-label">Assessments</span>
+          <div class="stat-value" id="stat-total-quizzes">0</div>
+          <span class="stat-sub">In local library</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Questions</span>
+          <div class="stat-value" id="stat-total-questions">0</div>
+          <span class="stat-sub">Across all topics</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Completed Tests</span>
+          <div class="stat-value" id="stat-total-attempts">0</div>
+          <span class="stat-sub">Logged submissions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Average Score</span>
+          <div class="stat-value" id="stat-avg-score">0%</div>
+          <span class="stat-sub">Overall accuracy</span>
+        </div>
+      </div>
+
+      <!-- Search Filter -->
+      <div class="filter-bar">
+        <div class="search-wrapper">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="search-quizzes" class="search-input" placeholder="Search assessments by keyword or topic...">
+        </div>
+      </div>
+
+      <!-- Quizzes Grid -->
+      <div class="quizzes-grid" id="quizzes-grid">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: PAST TESTS HISTORY ==================== -->
+    <section id="view-history" class="view">
+      <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h1 class="page-heading">Assessment History</h1>
+          <p class="page-subheading">Chronological record of completed tests. Click any assessment to inspect detailed questions or reattempt.</p>
+        </div>
+        <div>
+          <button class="btn btn-outline btn-sm" id="btn-clear-history" title="Delete all assessment history" style="color:var(--text-muted);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            <span>Delete All History</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="history-table-container">
+        <div id="history-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: HISTORICAL ATTEMPT DETAIL ==================== -->
+    <section id="view-attempt-detail" class="view">
+      <div style="margin-bottom: 1.5rem;">
+        <button class="btn btn-outline btn-sm" id="btn-back-to-history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Test History</span>
+        </button>
+      </div>
+
+      <div class="results-card">
+        <div class="attempt-header-row">
+          <div>
+            <div style="display:flex; align-items:center; gap:0.65rem; margin-bottom:0.35rem; flex-wrap:wrap;">
+              <span class="badge badge-indigo" id="detail-category">Category</span>
+              <span class="badge" id="detail-status-badge">Passed</span>
+              <span class="badge badge-drill" id="detail-jee-marks-badge">Net: 0 / 0 Marks</span>
+              <span class="badge badge-emerald" id="detail-integrity-badge">Clean (0 Violations)</span>
+            </div>
+            <h2 id="detail-quiz-title" style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Quiz Title</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem;" id="detail-timestamp">Completed on Date</p>
+          </div>
+
+          <div style="display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-secondary" id="btn-detail-drill-missed" style="display: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+              </svg>
+              <span id="detail-drill-label">Drill Missed Questions</span>
+            </button>
+            <button class="btn btn-primary" id="btn-detail-reattempt">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              <span>Reattempt Assessment</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="results-summary-grid" style="margin-top: 1.5rem;">
+          <div class="summary-box">
+            <div class="summary-val" id="detail-net-marks" style="color: #ffffff;">0 / 0</div>
+            <div class="summary-key">Net Marks</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" id="detail-penalty-marks" style="color: var(--accent-rose);">-0</div>
+            <div class="summary-key">Negative Penalty</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" id="detail-score">0 / 0</div>
+            <div class="summary-key">Correct Questions</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" id="detail-percent">0%</div>
+            <div class="summary-key">Accuracy</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" id="detail-duration">0m 0s</div>
+            <div class="summary-key">Time Spent</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" id="detail-total-q">0</div>
+            <div class="summary-key">Total Questions</div>
+          </div>
+        </div>
+
+        <h3 class="review-section-title" style="margin-top: 2rem;">Question Breakdown &amp; Historical Answers</h3>
+        <div id="detail-questions-list">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: QUIZ PLAYER ==================== -->
+    <section id="view-player" class="view">
+      <div class="player-header">
+        <div>
+          <h2 id="player-quiz-title" style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Assessment Title</h2>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span id="player-mode-badge" class="badge badge-indigo">Exam Mode</span>
+            <span id="player-scheme-badge" class="badge badge-slate">+4, -1 JEE Scheme</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div class="timer-box" id="player-timer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span id="timer-display">00:00</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-player-fullscreen" title="Toggle Fullscreen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+            <span>Fullscreen</span>
+          </button>
+          <button class="btn btn-outline btn-sm" id="btn-player-exit" title="Exit assessment">Exit</button>
+        </div>
+      </div>
+
+      <div class="player-container">
+        <!-- Main Quiz Question Area -->
+        <div class="quiz-panel">
+          <div class="progress-container">
+            <div class="progress-labels">
+              <span id="player-progress-text">Question 1 of 5</span>
+              <span class="shortcuts-hint">
+                <span class="kbd-cap">A</span>–<span class="kbd-cap">D</span> select, <span class="kbd-cap">←</span> <span class="kbd-cap">→</span> navigate
+              </span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="player-progress-fill"></div>
+            </div>
+          </div>
+
+          <div class="question-header" style="margin-top: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span class="badge badge-indigo" id="current-q-badge">Q1</span>
+              <span class="badge badge-slate" id="current-q-marks-badge">+4 · -1</span>
+            </div>
+            <!-- Exam Font & Picture Zoom Controls -->
+            <div class="exam-zoom-bar" id="exam-zoom-controls">
+              <span class="zoom-title">Scale:</span>
+              <button type="button" class="btn btn-outline btn-xs" id="btn-zoom-out" title="Decrease font & picture size">A−</button>
+              <span id="zoom-level-label" class="zoom-level-text">100%</span>
+              <button type="button" class="btn btn-outline btn-xs" id="btn-zoom-in" title="Increase font & picture size">A+</button>
+              <button type="button" class="btn btn-outline btn-xs" id="btn-zoom-reset" title="Reset zoom to default (100%)">Reset</button>
+            </div>
+          </div>
+
+          <div class="question-text" id="current-q-text">
+            <!-- Question text -->
+          </div>
+
+          <!-- Question Image Container -->
+          <div class="question-image-box" id="question-image-container" style="display: none;">
+            <!-- Injected dynamically -->
+          </div>
+
+          <!-- MCQ Options List -->
+          <div class="options-list" id="options-list">
+            <!-- Options dynamically injected -->
+          </div>
+
+          <!-- Numerical / Integer Answer Area (JEE Section B) -->
+          <div id="numerical-input-container" style="display: none; margin-top: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem;">
+              <label class="form-label" style="margin: 0; font-size: 0.875rem;">Enter Numerical / Integer Answer:</label>
+            </div>
+            <div class="numerical-field-wrap">
+              <input type="text" id="input-numerical-answer" class="form-control numerical-answer-box" placeholder="Enter value (e.g. 24 or -3.5)" autocomplete="off" />
+              <button type="button" class="btn btn-outline btn-sm" id="btn-clear-numerical">Clear</button>
+            </div>
+            
+            <!-- CBT On-Screen Virtual Numeric Keypad -->
+            <div class="cbt-keypad" id="cbt-numeric-keypad">
+              <button type="button" class="cbt-key" data-key="1">1</button>
+              <button type="button" class="cbt-key" data-key="2">2</button>
+              <button type="button" class="cbt-key" data-key="3">3</button>
+              <button type="button" class="cbt-key" data-key="4">4</button>
+              <button type="button" class="cbt-key" data-key="5">5</button>
+              <button type="button" class="cbt-key" data-key="6">6</button>
+              <button type="button" class="cbt-key" data-key="7">7</button>
+              <button type="button" class="cbt-key" data-key="8">8</button>
+              <button type="button" class="cbt-key" data-key="9">9</button>
+              <button type="button" class="cbt-key" data-key=".">.</button>
+              <button type="button" class="cbt-key" data-key="0">0</button>
+              <button type="button" class="cbt-key" data-key="-">-</button>
+              <button type="button" class="cbt-key cbt-key-wide" data-action="backspace">⌫ Backspace</button>
+              <button type="button" class="cbt-key cbt-key-wide" data-action="clear">Clear All</button>
+            </div>
+          </div>
+
+          <!-- Explanation Container (Practice mode) -->
+          <div id="explanation-container" style="display: none;">
+            <!-- Explanation injected -->
+          </div>
+
+          <!-- Navigation Controls -->
+          <div class="player-controls">
+            <div class="player-controls-left">
+              <button class="btn btn-secondary" id="btn-prev-q">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                <span>Previous</span>
+              </button>
+            </div>
+            <div class="player-controls-right" style="display:flex; align-items:center; gap:0.65rem;">
+              <button class="btn btn-outline" id="btn-flag-question">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>Flag for Review</span>
+                <span class="kbd-cap" style="margin-left:4px;">F</span>
+              </button>
+              <button class="btn btn-primary" id="btn-next-q">
+                <span>Next</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+              <button class="btn btn-success" id="btn-submit-quiz" style="display: none;">Submit Assessment</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Question Palette Sidebar -->
+        <aside class="palette-card">
+          <div class="palette-title">
+            <span>Question Palette</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; font-family: var(--font-mono);">
+              Total: <b id="palette-total-count">0</b>
+            </span>
+          </div>
+
+          <div class="palette-grid" id="palette-grid">
+            <!-- Number buttons injected -->
+          </div>
+
+          <div class="palette-legend">
+            <div class="legend-item">
+              <span class="legend-badge legend-ans" id="palette-count-ans">0</span>
+              <span class="legend-text">Answered</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-badge legend-notans" id="palette-count-notans">0</span>
+              <span class="legend-text">Not Answered</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-badge legend-notvis" id="palette-count-notvis">0</span>
+              <span class="legend-text">Not Visited</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-badge legend-marked" id="palette-count-marked">0</span>
+              <span class="legend-text">Marked for Review</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-badge legend-markedans" id="palette-count-markedans">0</span>
+              <span class="legend-text">Ans &amp; Marked for Review</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 5: RESULTS & SCORECARD ==================== -->
+    <section id="view-results" class="view">
+      <div class="results-card">
+        <div class="results-hero">
+          <div class="score-circle" id="results-score-circle">
+            <div class="score-percent" id="results-percent">+0</div>
+            <div class="score-label" id="results-percent-label">JEE Net Marks</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem; justify-content:center; margin-top:0.65rem; flex-wrap:wrap;">
+            <span class="badge" id="results-status-badge">Completed</span>
+            <span class="badge badge-drill" id="results-jee-marks-pill">Net: 0 / 0 Marks</span>
+          </div>
+          <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.9rem;">Review your performance breakdown and explanations below.</p>
+        </div>
+
+        <div class="results-summary-grid">
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--accent-emerald);" id="summary-gross-marks">+0</div>
+            <div class="summary-key">Gross Earned</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--accent-rose);" id="summary-penalty-marks">-0</div>
+            <div class="summary-key">Negative Penalty</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: #ffffff;" id="summary-net-marks">0 / 0</div>
+            <div class="summary-key">Net Score</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--accent-emerald);" id="summary-correct">0</div>
+            <div class="summary-key">Correct</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--accent-rose);" id="summary-incorrect">0</div>
+            <div class="summary-key">Incorrect</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--text-dim);" id="summary-skipped">0</div>
+            <div class="summary-key">Unattempted</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-val" style="color: var(--accent-cyan);" id="summary-time">0m 0s</div>
+            <div class="summary-key">Time Spent</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.65rem; justify-content: center; margin-bottom: 2.25rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="btn-results-drill-missed" style="display: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="6"/>
+              <circle cx="12" cy="12" r="2"/>
+            </svg>
+            <span id="results-drill-label">Drill Missed Questions</span>
+          </button>
+          <button class="btn btn-primary" id="btn-results-retake">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            <span>Reattempt Assessment</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-results-practice">Practice Mode</button>
+          <button class="btn btn-outline" id="btn-results-view-history">View in History</button>
+          <button class="btn btn-outline" id="btn-results-home">Back to Overview</button>
+        </div>
+
+        <h3 class="review-section-title">Question by Question Review</h3>
+        <div id="results-review-list">
+          <!-- Injected detailed review items -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 6: ASSESSMENT BUILDER ==================== -->
+    <section id="view-builder" class="view">
+      <div class="builder-layout">
+        <!-- Main Builder Content Column -->
+        <div class="builder-main">
+          <div class="form-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+              <h2 class="form-title" id="builder-header-title">Create New Assessment</h2>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-builder-quick-import" title="Paste raw text or Markdown questions">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                  </svg>
+                  <span>Quick Import</span>
+                </button>
+                <input type="file" id="input-import-json" accept=".json" style="display: none;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-builder-import">Import JSON</button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-builder-export">Export JSON</button>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="grid-column: 1 / -1;">
+                <label class="form-label">Assessment Title *</label>
+                <input type="text" id="input-quiz-title" class="form-control" placeholder="e.g. JEE Main Mock: Mechanics &amp; Electrodynamics" required>
+              </div>
+              <div class="form-group">
+                <div class="form-label-row">
+                  <label class="form-label" for="input-quiz-category">Category</label>
+                </div>
+                <input type="text" id="input-quiz-category" class="form-control" placeholder="e.g. Physics / JEE Prep" value="JEE Prep">
+              </div>
+              <div class="form-group">
+                <div class="form-label-row">
+                  <label class="form-label" for="input-quiz-time">Time Limit (Min)</label>
+                </div>
+                <input type="number" id="input-quiz-time" class="form-control" min="0" max="360" value="0" placeholder="0 for untimed">
+              </div>
+
+              <!-- Marking Scheme Configuration -->
+              <div class="form-group">
+                <div class="form-label-row">
+                  <label class="form-label" for="input-quiz-pos-marks">Marks for Correct (+)</label>
+                  <div class="scheme-pills">
+                    <button type="button" class="btn-scheme-pill" id="btn-scheme-jee">JEE (+4, -1)</button>
+                    <button type="button" class="btn-scheme-pill" id="btn-scheme-std">Std (+1, 0)</button>
+                  </div>
+                </div>
+                <input type="number" id="input-quiz-pos-marks" class="form-control" min="0.5" step="0.5" value="4">
+              </div>
+              <div class="form-group">
+                <div class="form-label-row">
+                  <label class="form-label" for="input-quiz-neg-marks">Penalty for Wrong (-)</label>
+                </div>
+                <input type="number" id="input-quiz-neg-marks" class="form-control" min="0" step="0.25" value="1">
+                <small class="form-hint">Note: Integer questions automatically incur 0 negative penalty.</small>
+              </div>
+
+              <div class="form-group" style="grid-column: 1 / -1;">
+                <label class="form-label">Description</label>
+                <textarea id="input-quiz-desc" class="form-control" rows="2" placeholder="Brief summary of syllabus or concepts tested..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Questions Dynamic List -->
+          <div id="builder-questions-container">
+            <!-- Injected question blocks -->
+          </div>
+
+          <!-- Sticky Action bar -->
+          <div class="builder-sticky-bar">
+            <div class="builder-sticky-left">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-builder-sticky-prev" title="Previous Question">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                <span>Prev Q</span>
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-builder-sticky-next" title="Done with this question / Next Question">
+                <span id="btn-builder-sticky-next-label">Next Q</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-builder-add-q">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>Add Question</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-builder-quick-import-bottom" title="Quick Import questions">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>Quick Import</span>
+              </button>
+            </div>
+            <div class="builder-sticky-center">
+              <span id="builder-stats-indicator" class="builder-status-text">Question 1 of 1</span>
+            </div>
+            <div class="builder-sticky-right">
+              <button type="button" class="btn btn-outline" id="btn-builder-cancel">Cancel</button>
+              <button type="button" class="btn btn-success" id="btn-builder-save" title="Save Assessment (Ctrl+S)">
+                <span>Save Assessment</span>
+                <span class="kbd-cap" style="background:#000; color:#fff; border-color:#000; font-size:0.65rem; height:18px; min-width:18px;">Ctrl+S</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fixed Right-Side Math & Science Symbols Sidebar -->
+        <aside class="builder-math-sidebar" id="builder-math-sidebar">
+          <div class="math-sidebar-header">
+            <span class="math-sidebar-title">Math &amp; Physics</span>
+            <span class="math-target-badge" id="math-target-badge">Active Input</span>
+          </div>
+          <p class="math-sidebar-sub">Click any symbol to insert at cursor.</p>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Powers &amp; Ordinals</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="1^{st}" data-suffix="^{st}" title="1st (1ˢᵗ)">1ˢᵗ</button>
+              <button type="button" class="math-side-btn" data-insert="2^{nd}" data-suffix="^{nd}" title="2nd (2ⁿᵈ)">2ⁿᵈ</button>
+              <button type="button" class="math-side-btn" data-insert="3^{rd}" data-suffix="^{rd}" title="3rd (3ʳᵈ)">3ʳᵈ</button>
+              <button type="button" class="math-side-btn" data-insert="^{th}" data-suffix="^{th}" title="th (ᵗʰ)">ᵗʰ</button>
+              <button type="button" class="math-side-btn" data-insert="^2" title="Square (x²)">x²</button>
+              <button type="button" class="math-side-btn" data-insert="^3" title="Cube (x³)">x³</button>
+              <button type="button" class="math-side-btn" data-insert="^{}" title="Power (xⁿ)">xⁿ</button>
+              <button type="button" class="math-side-btn" data-insert="_{}" title="Subscript (xₙ)">xₙ</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Vectors</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="\hat{i}" title="i-hat unit vector">î</button>
+              <button type="button" class="math-side-btn" data-insert="\hat{j}" title="j-hat unit vector">ĵ</button>
+              <button type="button" class="math-side-btn" data-insert="\hat{k}" title="k-hat unit vector">k̂</button>
+              <button type="button" class="math-side-btn" data-insert="\vec{r}" title="Vector arrow (r⃗)">r⃗</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Fractions &amp; Roots</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="\frac{a}{b}" title="Fraction a/b">a/b</button>
+              <button type="button" class="math-side-btn" data-insert="\sqrt{x}" title="Square root">√x</button>
+              <button type="button" class="math-side-btn" data-insert="\pm" title="Plus-minus">±</button>
+              <button type="button" class="math-side-btn" data-insert="\degree" title="Degree">°</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Greek Letters</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="\theta" title="Theta (θ)">θ</button>
+              <button type="button" class="math-side-btn" data-insert="\pi" title="Pi (π)">π</button>
+              <button type="button" class="math-side-btn" data-insert="\lambda" title="Lambda (λ)">λ</button>
+              <button type="button" class="math-side-btn" data-insert="\mu" title="Mu (μ)">μ</button>
+              <button type="button" class="math-side-btn" data-insert="\omega" title="Omega (ω)">ω</button>
+              <button type="button" class="math-side-btn" data-insert="\Delta" title="Delta (Δ)">Δ</button>
+              <button type="button" class="math-side-btn" data-insert="\Omega" title="Ohm (Ω)">Ω</button>
+              <button type="button" class="math-side-btn" data-insert="\alpha" title="Alpha (α)">α</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Relations &amp; Symbols</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="\approx" title="Approx (≈)">≈</button>
+              <button type="button" class="math-side-btn" data-insert="\neq" title="Not equal (≠)">≠</button>
+              <button type="button" class="math-side-btn" data-insert="\le" title="Less than equal (≤)">≤</button>
+              <button type="button" class="math-side-btn" data-insert="\ge" title="Greater than equal (≥)">≥</button>
+              <button type="button" class="math-side-btn" data-insert="\infty" title="Infinity (∞)">∞</button>
+              <button type="button" class="math-side-btn" data-insert="\times" title="Multiplication (×)">×</button>
+              <button type="button" class="math-side-btn" data-insert="\div" title="Division (÷)">÷</button>
+              <button type="button" class="math-side-btn" data-insert="\int" title="Integral (∫)">∫</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Determinants &amp; Matrices</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn math-det-trigger-btn" data-det-type="vmatrix" data-det-size="2" title="Create 2×2 Determinant">|2×2|</button>
+              <button type="button" class="math-side-btn math-det-trigger-btn" data-det-type="vmatrix" data-det-size="3" title="Create 3×3 Determinant">|3×3|</button>
+              <button type="button" class="math-side-btn math-det-trigger-btn" data-det-type="pmatrix" data-det-size="2" title="Create 2×2 Matrix">[2×2]</button>
+              <button type="button" class="math-side-btn math-det-trigger-btn" data-det-type="pmatrix" data-det-size="3" title="Create 3×3 Matrix">[3×3]</button>
+            </div>
+          </div>
+
+          <div class="math-sidebar-group">
+            <div class="math-group-title">Chemistry &amp; Equations</div>
+            <div class="math-symbol-grid">
+              <button type="button" class="math-side-btn" data-insert="\ce{2H2 + O2 -> 2H2O}" title="Reaction arrow (->)">A➔B</button>
+              <button type="button" class="math-side-btn" data-insert="\ce{<=>}" title="Equilibrium arrow (<=>)">⇌</button>
+              <button type="button" class="math-side-btn" data-insert="\ce{H2O}" title="Chemical formula (H2O)">H₂O</button>
+              <button type="button" class="math-side-btn" data-insert="\ce{Fe^{2+}}" title="Chemical ion (Fe²⁺)">Fe²⁺</button>
+            </div>
+          </div>
+
+          <!-- Interactive Determinant & Matrix Input Box (Opened on demand) -->
+          <div class="det-builder-card" id="det-builder-card">
+            <div class="det-builder-header">
+              <div class="det-builder-title">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <line x1="9" y1="3" x2="9" y2="21"/>
+                  <line x1="15" y1="3" x2="15" y2="21"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="3" y1="15" x2="21" y2="15"/>
+                </svg>
+                <span id="det-builder-title-text">Determinant Box</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <div class="det-type-selector">
+                  <button type="button" class="det-type-btn active" data-type="vmatrix" title="Determinant |A|">|A|</button>
+                  <button type="button" class="det-type-btn" data-type="pmatrix" title="Matrix [A]">[A]</button>
+                </div>
+                <button type="button" class="det-close-btn" id="btn-det-close" title="Close Box">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="det-size-toolbar">
+              <div class="det-size-pills">
+                <button type="button" class="det-size-btn active" data-size="2">2×2</button>
+                <button type="button" class="det-size-btn" data-size="3">3×3</button>
+              </div>
+              <span class="det-target-hint" id="det-target-hint">Target: Current Q</span>
+            </div>
+
+            <!-- Determinant bracket grid with inputs -->
+            <div class="det-grid-wrapper" id="det-grid-wrapper" data-size="2" data-type="vmatrix">
+              <div class="det-bracket det-bracket-left"></div>
+              <div class="det-cells-grid" id="det-cells-grid">
+                <!-- Dynamically rendered cells -->
+              </div>
+              <div class="det-bracket det-bracket-right"></div>
+            </div>
+
+            <!-- Live KaTeX preview of the determinant -->
+            <div class="det-mini-preview" id="det-mini-preview" title="Live Determinant Preview">
+              <span class="det-preview-placeholder">Live Preview</span>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="det-builder-actions">
+              <button type="button" class="btn-det-clear" id="btn-det-clear" title="Clear all cell values">Clear</button>
+              <button type="button" class="btn-det-insert" id="btn-det-done" title="Paste determinant into active question or option">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>Done · Paste</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Image Lightbox Modal -->
+  <div class="modal-overlay" id="lightbox-modal">
+    <div class="modal-content">
+      <button class="modal-close" id="lightbox-close" title="Close (Esc)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <img id="lightbox-img" src="" alt="Full resolution view">
+    </div>
+  </div>
+
+  <!-- Quick Import Modal -->
+  <div class="modal-overlay" id="quick-import-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Bulk Import Questions from Text</h3>
+          <p class="modal-subtitle">Paste raw text or Markdown questions. Mark correct options with an asterisk (e.g. *B).</p>
+        </div>
+        <button class="modal-close" id="quick-import-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem;">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Format: 1. Question / A) Option / *B) Correct Option</span>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-quick-import-sample">Load Sample Format</button>
+        </div>
+        <textarea id="quick-import-text" class="form-control" rows="12" placeholder="1. What is the primary purpose of Raft consensus?
+A) File storage
+*B) Distributed state machine replication
+C) Cache invalidation
+D) Query planning
+Explanation: Raft ensures distributed nodes agree on a sequence of state transitions.
+
+2. True or False: UDP guarantees in-order packet delivery.
+A) True
+*B) False
+Explanation: UDP is connectionless and does not guarantee packet ordering."></textarea>
+      </div>
+      <div class="modal-footer">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;">
+          <input type="checkbox" id="quick-import-replace" checked>
+          <span>Replace existing questions in assessment</span>
+        </label>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn btn-outline" id="btn-quick-import-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-quick-import-apply">Parse &amp; Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CBT Security / Anti-Cheating Alert Modal -->
+  <div class="modal-overlay" id="security-warning-modal" style="z-index: 1000;">
+    <div class="modal-dialog security-dialog">
+      <div class="security-banner">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <h3 class="security-alert-title">Exam Security Violation Detected</h3>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 1.75rem 1.5rem;">
+        <div class="strike-tracker" id="security-strike-tracker">
+          <span class="strike-pill active" id="strike-dot-1">Warning 1</span>
+          <span class="strike-pill" id="strike-dot-2">Warning 2</span>
+          <span class="strike-pill" id="strike-dot-3">Disqualification</span>
+        </div>
+        <p id="security-warning-message" class="security-warning-text" style="font-size: 1.05rem; color: #ffffff; margin-bottom: 0.75rem; font-weight: 600;">
+          Window or tab switch detected!
+        </p>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.5rem;">
+          Navigating away from the active examination window is strictly prohibited under CBT integrity guidelines. You have <b id="security-strikes-left" style="color:var(--accent-rose);">2 warnings remaining</b>. If 3 violations are logged, your exam will be automatically submitted and flagged.
+        </p>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-security-resume" style="width: 100%;">
+          I Acknowledge &amp; Resume Exam
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Enforcer Modal -->
+  <div class="modal-overlay" id="fullscreen-lock-modal" style="z-index: 999;">
+    <div class="modal-dialog" style="max-width: 480px; text-align: center; padding: 2rem;">
+      <div style="margin-bottom: 1rem; color: var(--accent-amber);">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </div>
+      <h3 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem;">Fullscreen Mode Required</h3>
+      <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+        Exiting fullscreen is not permitted during an active examination. Please re-engage fullscreen mode to continue answering questions.
+      </p>
+      <button type="button" class="btn btn-primary" id="btn-reenter-fullscreen" style="width: 100%;">
+        Re-enter Fullscreen &amp; Continue
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- KaTeX & Chemistry Extension -->
+  <script src="/static/vendor/katex/katex.min.js"></script>
+  <script src="/static/vendor/katex/contrib/mhchem.min.js"></script>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js?v=2.6"></script>
+  <script src="/static/js/quiz-player.js?v=2.6"></script>
+  <script src="/static/js/quiz-builder.js?v=2.6"></script>
+  <script src="/static/js/app.js?v=2.6"></script>
+</body>
+</html>

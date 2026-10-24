@@ -1,0 +1,1411 @@
+/**
+ * Main Application Controller for QuizMaster Assessment Platform
+ * Enterprise-grade UI, Tab Navigation, and Past Tests History Engine.
+ */
+
+const App = {
+  currentView: 'dashboard',
+  allQuizzes: [],
+  allAttempts: [],
+  activeCategory: 'All',
+  lastCompletedQuiz: null,
+
+  init() {
+    this.bindGlobalEvents();
+    this.showDashboard();
+    this.refreshHistoryBadge();
+  },
+
+  bindGlobalEvents() {
+    // Navigation brand click
+    document.getElementById('nav-brand').addEventListener('click', () => {
+      this.showDashboard();
+    });
+
+    // Top Segmented Nav Tabs
+    document.getElementById('tab-assessments').addEventListener('click', () => {
+      this.showDashboard();
+    });
+    document.getElementById('tab-history').addEventListener('click', () => {
+      this.showHistory();
+    });
+
+    // Nav Create button
+    document.getElementById('btn-nav-create').addEventListener('click', () => {
+      this.showBuilder();
+    });
+
+    // Back to history button
+    document.getElementById('btn-back-to-history').addEventListener('click', () => {
+      this.showHistory();
+    });
+
+    // Clear all history button
+    const btnClearHistory = document.getElementById('btn-clear-history');
+    if (btnClearHistory) {
+      btnClearHistory.addEventListener('click', async () => {
+        if (!this.allAttempts || this.allAttempts.length === 0) {
+          this.showToast('No history records to delete', 'info');
+          return;
+        }
+        if (!confirm('Are you sure you want to delete ALL test history? This action cannot be undone.')) {
+          return;
+        }
+        try {
+          await API.clearAllAttempts();
+          this.showToast('All assessment history cleared', 'success');
+          await this.showHistory();
+          await this.loadDashboardMetrics();
+        } catch (err) {
+          this.showToast(`Failed to clear history: ${err.message}`, 'error');
+        }
+      });
+    }
+
+    // Search input with 120ms debounce for buttery-smooth typing
+    let searchDebounceTimer = null;
+    document.getElementById('search-quizzes').addEventListener('input', () => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        this.renderDashboardCards();
+      }, 120);
+    });
+
+    // Close Application button
+    const btnAppClose = document.getElementById('btn-app-close');
+    if (btnAppClose) {
+      btnAppClose.addEventListener('click', () => {
+        this.closeApplication();
+      });
+    }
+
+    // Builder Prev Question (Sticky Bar)
+    const btnStickyPrev = document.getElementById('btn-builder-sticky-prev');
+    if (btnStickyPrev) {
+      btnStickyPrev.addEventListener('click', () => {
+        QuizBuilder.prevQuestion();
+      });
+    }
+
+    // Builder Next Question (Sticky Bar)
+    const btnStickyNext = document.getElementById('btn-builder-sticky-next');
+    if (btnStickyNext) {
+      btnStickyNext.addEventListener('click', () => {
+        QuizBuilder.nextQuestion();
+      });
+    }
+
+    // Builder Add Question
+    document.getElementById('btn-builder-add-q').addEventListener('click', () => {
+      QuizBuilder.addQuestion();
+    });
+
+    // Builder Save Quiz
+    document.getElementById('btn-builder-save').addEventListener('click', () => {
+      QuizBuilder.saveQuiz();
+    });
+
+    // Builder Quick Import Bottom Button
+    const btnQuickImportBottom = document.getElementById('btn-builder-quick-import-bottom');
+    if (btnQuickImportBottom) {
+      btnQuickImportBottom.addEventListener('click', () => {
+        document.getElementById('quick-import-modal').classList.add('active');
+        document.getElementById('quick-import-text').focus();
+      });
+    }
+
+    // Ctrl+S / Cmd+S shortcut to save quiz in builder
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        const builderView = document.getElementById('view-builder');
+        if (builderView && builderView.classList.contains('active')) {
+          e.preventDefault();
+          QuizBuilder.saveQuiz();
+        }
+      }
+    });
+
+    // Builder Cancel
+    document.getElementById('btn-builder-cancel').addEventListener('click', () => {
+      this.showDashboard();
+    });
+
+    // Builder Export
+    document.getElementById('btn-builder-export').addEventListener('click', () => {
+      QuizBuilder.exportCurrentQuizJson();
+    });
+
+    // Builder Import
+    const importInput = document.getElementById('input-import-json');
+    document.getElementById('btn-builder-import').addEventListener('click', () => {
+      importInput.click();
+    });
+    importInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        QuizBuilder.importQuizJson(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+
+    // Builder Marking Scheme Presets
+    const btnSchemeJee = document.getElementById('btn-scheme-jee');
+    if (btnSchemeJee) {
+      btnSchemeJee.addEventListener('click', () => {
+        const posInput = document.getElementById('input-quiz-pos-marks');
+        const negInput = document.getElementById('input-quiz-neg-marks');
+        if (posInput) posInput.value = '4';
+        if (negInput) negInput.value = '1';
+        this.showToast('JEE Marking Scheme applied (+4 correct, -1 wrong MCQ)', 'info');
+      });
+    }
+
+    const btnSchemeStd = document.getElementById('btn-scheme-std');
+    if (btnSchemeStd) {
+      btnSchemeStd.addEventListener('click', () => {
+        const posInput = document.getElementById('input-quiz-pos-marks');
+        const negInput = document.getElementById('input-quiz-neg-marks');
+        if (posInput) posInput.value = '1';
+        if (negInput) negInput.value = '0';
+        this.showToast('Standard Marking Scheme applied (+1 correct, 0 wrong)', 'info');
+      });
+    }
+
+    // Builder Quick Text Import Modal
+    const btnQuickImport = document.getElementById('btn-builder-quick-import');
+    if (btnQuickImport) {
+      btnQuickImport.addEventListener('click', () => {
+        document.getElementById('quick-import-modal').classList.add('active');
+        document.getElementById('quick-import-text').focus();
+      });
+    }
+
+    const closeQuickImport = () => {
+      document.getElementById('quick-import-modal').classList.remove('active');
+    };
+
+    const qiCloseBtn = document.getElementById('quick-import-close');
+    if (qiCloseBtn) qiCloseBtn.addEventListener('click', closeQuickImport);
+    const qiCancelBtn = document.getElementById('btn-quick-import-cancel');
+    if (qiCancelBtn) qiCancelBtn.addEventListener('click', closeQuickImport);
+
+    const qiModal = document.getElementById('quick-import-modal');
+    if (qiModal) {
+      qiModal.addEventListener('click', (e) => {
+        if (e.target.id === 'quick-import-modal') closeQuickImport();
+      });
+    }
+
+    const qiSampleBtn = document.getElementById('btn-quick-import-sample');
+    if (qiSampleBtn) {
+      qiSampleBtn.addEventListener('click', () => {
+        const sampleText = `1. In Linux kernel architecture, what is the role of an epoll instance?
+A) Block all non-critical signals
+*B) High-performance I/O event notification facility
+C) Encrypt network packets before transmission
+D) Manage physical RAM allocation pools
+Explanation: epoll is scalable to large numbers of file descriptors with O(1) wait complexity.
+
+2. True or False: ACID transactions guarantee immediate cross-datacenter linearizability without latency cost.
+A) True
+*B) False
+Explanation: The CAP theorem and PACELC theorem dictate latency and consistency trade-offs across network partitions.
+
+3. Which data structure provides O(1) amortized insertion and lookup?
+A) Red-Black Tree
+B) Binary Heap
+*C) Hash Table
+D) Skip List
+Explanation: Hash tables achieve O(1) average/amortized performance with suitable hash distributions.`;
+        document.getElementById('quick-import-text').value = sampleText;
+      });
+    }
+
+    const qiApplyBtn = document.getElementById('btn-quick-import-apply');
+    if (qiApplyBtn) {
+      qiApplyBtn.addEventListener('click', () => {
+        const text = document.getElementById('quick-import-text').value;
+        const replace = document.getElementById('quick-import-replace').checked;
+        const success = QuizBuilder.applyBulkImport(text, replace);
+        if (success) {
+          closeQuickImport();
+          document.getElementById('quick-import-text').value = '';
+        }
+      });
+    }
+
+    // Player Navigation
+    document.getElementById('btn-prev-q').addEventListener('click', () => {
+      QuizPlayer.prevQuestion();
+    });
+    document.getElementById('btn-next-q').addEventListener('click', () => {
+      QuizPlayer.nextQuestion();
+    });
+    document.getElementById('btn-flag-question').addEventListener('click', () => {
+      QuizPlayer.toggleFlagCurrent();
+    });
+    document.getElementById('btn-submit-quiz').addEventListener('click', () => {
+      QuizPlayer.confirmSubmit();
+    });
+
+    // Exam Font & Diagram Zoom Controls
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    if (btnZoomIn) btnZoomIn.addEventListener('click', () => QuizPlayer.zoomIn());
+
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    if (btnZoomOut) btnZoomOut.addEventListener('click', () => QuizPlayer.zoomOut());
+
+    const btnZoomReset = document.getElementById('btn-zoom-reset');
+    if (btnZoomReset) btnZoomReset.addEventListener('click', () => QuizPlayer.zoomReset());
+    document.getElementById('btn-player-exit').addEventListener('click', () => {
+      if (confirm('Are you sure you want to exit the assessment? Your current progress will not be saved.')) {
+        clearInterval(QuizPlayer.timerInterval);
+        QuizPlayer.detachKeyboardEvents();
+        QuizPlayer.deactivateAntiCheatingLockdown();
+        try {
+          if (document.fullscreenElement || document.webkitFullscreenElement) {
+            if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          }
+        } catch (e) {}
+        document.body.classList.remove('fullscreen-test-mode');
+        this.showDashboard();
+      }
+    });
+
+    // Results Buttons
+    document.getElementById('btn-results-retake').addEventListener('click', () => {
+      this.startQuiz(this.lastCompletedQuiz.id, 'exam');
+    });
+    document.getElementById('btn-results-practice').addEventListener('click', () => {
+      this.startQuiz(this.lastCompletedQuiz.id, 'practice');
+    });
+    document.getElementById('btn-results-view-history').addEventListener('click', () => {
+      this.showHistory();
+    });
+    document.getElementById('btn-results-home').addEventListener('click', () => {
+      this.showDashboard();
+    });
+
+    // Lightbox modal close
+    const lbClose = document.getElementById('lightbox-close');
+    if (lbClose) lbClose.addEventListener('click', () => this.closeLightbox());
+    const lbModal = document.getElementById('lightbox-modal');
+    if (lbModal) lbModal.addEventListener('click', (e) => {
+      if (e.target.id === 'lightbox-modal') this.closeLightbox();
+    });
+
+    // Fullscreen toggle buttons
+    const btnFs = document.getElementById('btn-toggle-fullscreen');
+    if (btnFs) btnFs.addEventListener('click', () => this.toggleFullscreen());
+
+    const btnPlayerFs = document.getElementById('btn-player-fullscreen');
+    if (btnPlayerFs) btnPlayerFs.addEventListener('click', () => this.toggleFullscreen());
+
+    document.addEventListener('fullscreenchange', () => this.updateFullscreenUI());
+    document.addEventListener('webkitfullscreenchange', () => this.updateFullscreenUI());
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.closeLightbox();
+        const qi = document.getElementById('quick-import-modal');
+        if (qi && qi.classList.contains('active')) {
+          qi.classList.remove('active');
+        }
+      }
+      if (e.key === 'F11') {
+        e.preventDefault();
+        this.toggleFullscreen();
+      }
+    });
+  },
+
+  toggleFullscreen() {
+    try {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen error:', err);
+    }
+  },
+
+  updateFullscreenUI() {
+    const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    const iconEnter = document.getElementById('fs-icon-enter');
+    const iconExit = document.getElementById('fs-icon-exit');
+    const label = document.getElementById('fs-btn-label');
+    if (iconEnter && iconExit && label) {
+      iconEnter.style.display = isFs ? 'none' : 'block';
+      iconExit.style.display = isFs ? 'block' : 'none';
+      label.textContent = isFs ? 'Windowed' : 'Fullscreen';
+    }
+  },
+
+  switchView(viewName) {
+    this.currentView = viewName;
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById(`view-${viewName}`);
+    if (target) {
+      target.classList.add('active');
+      window.scrollTo(0, 0);
+    }
+    this.updateActiveNavTab(viewName);
+  },
+
+  updateActiveNavTab(viewName) {
+    const tabAssessments = document.getElementById('tab-assessments');
+    const tabHistory = document.getElementById('tab-history');
+
+    tabAssessments.classList.remove('active');
+    tabHistory.classList.remove('active');
+
+    if (viewName === 'dashboard') {
+      tabAssessments.classList.add('active');
+    } else if (viewName === 'history' || viewName === 'attempt-detail') {
+      tabHistory.classList.add('active');
+    }
+  },
+
+  async refreshHistoryBadge() {
+    try {
+      const attempts = await API.getAllAttempts();
+      const badge = document.getElementById('history-count-badge');
+      if (badge) {
+        badge.textContent = attempts.length || 0;
+      }
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  async showDashboard() {
+    this.switchView('dashboard');
+    try {
+      this.allQuizzes = await API.getQuizzes();
+      const stats = await API.getStats();
+      this.updateStatsRibbon(stats);
+      this.renderDashboardCards();
+      this.refreshHistoryBadge();
+    } catch (err) {
+      this.showToast(`Error loading assessments: ${err.message}`, 'error');
+    }
+  },
+
+  updateStatsRibbon(stats) {
+    if (!stats) return;
+    document.getElementById('stat-total-quizzes').textContent = stats.total_quizzes || 0;
+    document.getElementById('stat-total-questions').textContent = stats.total_questions || 0;
+    document.getElementById('stat-total-attempts').textContent = stats.total_attempts || 0;
+    document.getElementById('stat-avg-score').textContent = `${stats.average_score || 0}%`;
+  },
+
+  renderCategoryChips() {
+    const container = document.getElementById('category-chips');
+    if (!container) return;
+    container.innerHTML = '';
+  },
+
+  renderDashboardCards() {
+    const grid = document.getElementById('quizzes-grid');
+    grid.innerHTML = '';
+
+    const searchTerm = document.getElementById('search-quizzes').value.toLowerCase().trim();
+
+    const filtered = this.allQuizzes.filter(q => {
+      const matchesSearch = !searchTerm ||
+        q.title.toLowerCase().includes(searchTerm) ||
+        (q.category && q.category.toLowerCase().includes(searchTerm)) ||
+        (q.description && q.description.toLowerCase().includes(searchTerm));
+      return matchesSearch;
+    });
+
+    if (this.allQuizzes.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 4.5rem 1.5rem; color: var(--text-muted);">
+          <div style="width: 44px; height: 44px; border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; color: var(--accent-indigo);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.35rem;">No assessments yet</h3>
+          <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; max-width: 380px; margin-left: auto; margin-right: auto;">
+            Get started by authoring a new assessment or importing questions from text or JSON.
+          </p>
+          <button class="btn btn-primary" onclick="App.showBuilder()">+ Create Assessment</button>
+        </div>
+      `;
+      return;
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-muted);">
+          <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 1rem;">No assessments match "${this.escapeHtml(searchTerm)}"</p>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('search-quizzes').value=''; App.renderDashboardCards();">Clear Search</button>
+        </div>
+      `;
+      return;
+    }
+
+    filtered.forEach(q => {
+      const card = document.createElement('div');
+      card.className = 'quiz-card';
+
+      const timeText = q.time_limit_minutes > 0 ? `${q.time_limit_minutes}m` : 'Untimed';
+      const scoreBadge = q.best_score_percent !== null && q.best_score_percent !== undefined
+        ? `<span class="badge badge-emerald">Best: ${Math.round(q.best_score_percent)}%</span>`
+        : `<span class="badge badge-slate">Unattempted</span>`;
+
+      card.innerHTML = `
+        <div>
+          <div class="quiz-meta">
+            <span class="badge badge-indigo">${this.escapeHtml(q.category || 'General')}</span>
+            ${scoreBadge}
+          </div>
+          <h2 class="quiz-title">${this.escapeHtml(q.title)}</h2>
+          <p class="quiz-desc">${this.escapeHtml(q.description || 'No description provided.')}</p>
+        </div>
+
+        <div>
+          <div class="quiz-info-row">
+            <div class="quiz-info-item">
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <b style="color:var(--text-primary);">${q.question_count || 0}</b> Qs
+              </span>
+            </div>
+            <div class="quiz-info-item">
+              <span>·</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <b style="color:var(--text-primary);">${timeText}</b>
+              </span>
+            </div>
+            <div class="quiz-info-item">
+              <span>·</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <b style="color:var(--text-primary);">${q.attempt_count || 0}</b> attempts
+              </span>
+            </div>
+          </div>
+
+          <div class="quiz-card-actions">
+            <button class="btn btn-primary btn-sm btn-start-exam" style="flex: 2; gap: 0.45rem;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Start Exam</span>
+            </button>
+            <button class="btn btn-secondary btn-sm btn-start-practice" title="Practice mode with instant answer reveal" style="gap: 0.45rem;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Practice</span>
+            </button>
+            <button class="btn btn-outline btn-sm btn-edit-quiz" title="Edit Assessment">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="btn btn-danger btn-sm btn-del-quiz" title="Delete Assessment">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+
+      card.querySelector('.btn-start-exam').addEventListener('click', () => {
+        this.startQuiz(q.id, 'exam');
+      });
+      card.querySelector('.btn-start-practice').addEventListener('click', () => {
+        this.startQuiz(q.id, 'practice');
+      });
+      card.querySelector('.btn-edit-quiz').addEventListener('click', () => {
+        this.editQuiz(q.id);
+      });
+      card.querySelector('.btn-del-quiz').addEventListener('click', () => {
+        this.deleteQuiz(q.id, q.title);
+      });
+
+      grid.appendChild(card);
+    });
+  },
+
+  /* ==================== TEST HISTORY FEATURE ==================== */
+  async showHistory() {
+    this.switchView('history');
+    const container = document.getElementById('history-list');
+    container.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading test history...</div>';
+
+    try {
+      this.allAttempts = await API.getAllAttempts();
+      this.refreshHistoryBadge();
+
+      const btnClearHistory = document.getElementById('btn-clear-history');
+      if (btnClearHistory) {
+        btnClearHistory.style.display = this.allAttempts.length === 0 ? 'none' : 'inline-flex';
+      }
+
+      if (this.allAttempts.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
+            <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 0.5rem;">No test attempts recorded yet</p>
+            <p style="font-size: 0.85rem; margin-bottom: 1.25rem;">Complete an assessment in Exam mode to view your full performance history.</p>
+            <button class="btn btn-primary" onclick="App.showDashboard()">Browse Assessments</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      this.allAttempts.forEach(att => {
+        const row = document.createElement('div');
+        row.className = 'history-item-row';
+
+        const percent = Math.round(att.score_percent || 0);
+        const isPassed = percent >= 70;
+        const statusBadge = isPassed
+          ? `<span class="badge badge-emerald">${percent}% — Passed</span>`
+          : `<span class="badge badge-rose">${percent}% — Below 70%</span>`;
+
+        // Format Date
+        let dateStr = att.completed_at;
+        try {
+          const d = new Date(att.completed_at + 'Z');
+          dateStr = d.toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch (e) {
+          // fallback
+        }
+
+        const mins = Math.floor((att.time_taken_seconds || 0) / 60);
+        const secs = (att.time_taken_seconds || 0) % 60;
+        const durationText = `${mins}m ${secs}s`;
+
+        const missedCount = (att.total_questions || 0) - (att.score || 0);
+        const drillBtnHtml = missedCount > 0
+          ? `<button class="btn btn-secondary btn-sm btn-drill-att" title="Drill ${missedCount} missed questions">
+               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+               <span>Drill (${missedCount})</span>
+             </button>`
+          : '';
+
+        const isDisqualified = Boolean(att.is_disqualified);
+        const vCount = att.violations_count || 0;
+        let integrityBadgeHtml = '';
+        if (isDisqualified) {
+          integrityBadgeHtml = `<span class="badge badge-disqualified" title="Disqualified: Exceeded maximum window switches">❌ Disqualified</span>`;
+        } else if (vCount > 0) {
+          integrityBadgeHtml = `<span class="badge badge-amber" title="${vCount} window switches detected">⚠️ ${vCount} Security Flag${vCount === 1 ? '' : 's'}</span>`;
+        }
+
+        row.innerHTML = `
+          <div class="history-item-main">
+            <div class="history-item-title">
+              <span>${this.escapeHtml(att.quiz_title)}</span>
+              <span class="badge badge-indigo">${this.escapeHtml(att.category || 'General')}</span>
+              ${integrityBadgeHtml}
+            </div>
+            <div class="history-item-meta">
+              <span>Completed ${dateStr}</span>
+              <span>·</span>
+              <span>${att.total_questions} questions</span>
+              <span>·</span>
+              <span>Duration: ${durationText}</span>
+            </div>
+          </div>
+
+          <div class="history-item-score">
+            ${statusBadge}
+            ${(att.net_marks !== null && att.net_marks !== undefined)
+              ? `<span style="font-size:0.775rem; font-weight:600; color:${att.net_marks >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}; margin-top:0.2rem;">Net: ${att.net_marks > 0 ? '+' : ''}${att.net_marks} / ${att.max_marks || (att.total_questions * 4)} Marks</span>`
+              : `<span style="font-size:0.775rem; color:var(--text-muted); margin-top:0.25rem;">Score: ${att.score} / ${att.total_questions}</span>`}
+          </div>
+
+          <div class="history-item-actions">
+            ${drillBtnHtml}
+            <button class="btn btn-outline btn-sm btn-inspect-att">Review</button>
+            <button class="btn btn-outline btn-sm btn-reattempt-att">Reattempt</button>
+            <button class="btn btn-outline btn-sm btn-del-att" title="Delete attempt record">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+        `;
+
+        if (missedCount > 0) {
+          const drillBtn = row.querySelector('.btn-drill-att');
+          if (drillBtn) {
+            drillBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              try {
+                const detail = await API.getAttemptDetail(att.attempt_id);
+                if (detail && detail.quiz) {
+                  this.startMissedQuestionsDrill(detail.quiz, detail.answers || {});
+                }
+              } catch (err) {
+                this.showToast(`Error starting drill: ${err.message}`, 'error');
+              }
+            });
+          }
+        }
+
+        row.querySelector('.btn-inspect-att').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.inspectAttempt(att.attempt_id);
+        });
+
+        row.querySelector('.btn-reattempt-att').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.startQuiz(att.quiz_id, 'exam');
+        });
+
+        const delBtn = row.querySelector('.btn-del-att');
+        if (delBtn) {
+          delBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm(`Delete attempt for "${att.quiz_title}" from history?`)) return;
+            try {
+              await API.deleteAttempt(att.attempt_id);
+              this.showToast('Attempt record deleted', 'success');
+              await this.showHistory();
+              await this.loadDashboardMetrics();
+            } catch (err) {
+              this.showToast(`Failed to delete attempt: ${err.message}`, 'error');
+            }
+          });
+        }
+
+        row.addEventListener('click', () => {
+          this.inspectAttempt(att.attempt_id);
+        });
+
+        container.appendChild(row);
+      });
+    } catch (err) {
+      container.innerHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--accent-rose);">Error loading history: ${err.message}</div>`;
+    }
+  },
+
+  async inspectAttempt(attemptId) {
+    try {
+      const data = await API.getAttemptDetail(attemptId);
+      if (!data || !data.quiz) {
+        this.showToast('Could not load attempt details', 'error');
+        return;
+      }
+
+      this.switchView('attempt-detail');
+
+      // Populate summary header
+      document.getElementById('detail-quiz-title').textContent = data.quiz_title;
+      document.getElementById('detail-category').textContent = data.category || 'General';
+
+      let dateStr = data.completed_at;
+      try {
+        const d = new Date(data.completed_at + 'Z');
+        dateStr = d.toLocaleDateString(undefined, {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        // fallback
+      }
+      document.getElementById('detail-timestamp').textContent = `Completed on ${dateStr}`;
+
+      const posMarks = (data.positive_marks !== undefined && data.positive_marks !== null) ? parseFloat(data.positive_marks) : 4.0;
+      const negMarks = (data.negative_marks !== undefined && data.negative_marks !== null) ? parseFloat(data.negative_marks) : 1.0;
+      const grossEarned = data.positive_score !== null && data.positive_score !== undefined ? data.positive_score : (data.score * posMarks);
+      const penaltyMarks = data.negative_penalty !== null && data.negative_penalty !== undefined ? data.negative_penalty : 0;
+      const netMarks = data.net_marks !== null && data.net_marks !== undefined ? data.net_marks : (grossEarned - penaltyMarks);
+      const maxMarks = data.max_marks !== null && data.max_marks !== undefined ? data.max_marks : (data.total_questions * posMarks);
+
+      const percent = Math.round(data.score_percent || 0);
+      const isPassed = percent >= 70;
+      const statusBadge = document.getElementById('detail-status-badge');
+      statusBadge.textContent = isPassed ? 'Passed (≥ 70%)' : 'Needs Review (< 70%)';
+      statusBadge.className = isPassed ? 'badge badge-emerald' : 'badge badge-rose';
+
+      const integrityBadge = document.getElementById('detail-integrity-badge');
+      if (integrityBadge) {
+        const vCount = data.violations_count || 0;
+        const isDisq = Boolean(data.is_disqualified);
+        if (isDisq) {
+          integrityBadge.textContent = `❌ Disqualified (${vCount} Violations)`;
+          integrityBadge.className = 'badge badge-disqualified';
+        } else if (vCount > 0) {
+          integrityBadge.textContent = `⚠️ Security Flag (${vCount} Window Switch${vCount === 1 ? '' : 'es'})`;
+          integrityBadge.className = 'badge badge-amber';
+        } else {
+          integrityBadge.textContent = '🛡️ Clean Attempt (0 Violations)';
+          integrityBadge.className = 'badge badge-emerald';
+        }
+      }
+
+      const jeePill = document.getElementById('detail-jee-marks-badge');
+      if (jeePill) {
+        jeePill.style.display = 'inline-flex';
+        jeePill.textContent = `Net: ${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks} Marks`;
+      }
+
+      const netMarksEl = document.getElementById('detail-net-marks');
+      if (netMarksEl) {
+        netMarksEl.textContent = `${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks}`;
+        netMarksEl.style.color = netMarks >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+      }
+      const penaltyEl = document.getElementById('detail-penalty-marks');
+      if (penaltyEl) penaltyEl.textContent = `-${penaltyMarks}`;
+
+      document.getElementById('detail-score').textContent = `${data.score} / ${data.total_questions}`;
+      document.getElementById('detail-percent').textContent = `${percent}%`;
+
+      const mins = Math.floor((data.time_taken_seconds || 0) / 60);
+      const secs = (data.time_taken_seconds || 0) % 60;
+      document.getElementById('detail-duration').textContent = `${mins}m ${secs}s`;
+      document.getElementById('detail-total-q').textContent = data.total_questions;
+
+      // Reattempt button handler
+      const reattemptBtn = document.getElementById('btn-detail-reattempt');
+      reattemptBtn.onclick = () => {
+        this.startQuiz(data.quiz_id, 'exam');
+      };
+
+      const userAnswers = data.answers || {};
+
+      // Drill Missed Questions button handler
+      const missedQuestions = data.quiz.questions.filter(q => {
+        const userVal = userAnswers[q.id] !== undefined ? userAnswers[q.id] : userAnswers[String(q.id)];
+        if (q.question_type === 'integer') {
+          if (userVal === undefined || userVal === null || String(userVal).trim() === '') return true;
+          const corrVal = q.correct_numerical_value;
+          const tol = parseFloat(q.numerical_tolerance || 0);
+          try {
+            return !(corrVal !== null && corrVal !== undefined && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol);
+          } catch (e) {
+            return true;
+          }
+        } else {
+          const correctOpt = (q.options || []).find(o => o.is_correct);
+          return !(userVal !== undefined && correctOpt && userVal === correctOpt.id);
+        }
+      });
+      const missedCount = missedQuestions.length;
+      const drillBtn = document.getElementById('btn-detail-drill-missed');
+      const drillLabel = document.getElementById('detail-drill-label');
+      if (drillBtn) {
+        if (missedCount > 0) {
+          drillBtn.style.display = 'inline-flex';
+          if (drillLabel) drillLabel.textContent = `Drill Missed (${missedCount})`;
+          drillBtn.onclick = () => {
+            this.startMissedQuestionsDrill(data.quiz, userAnswers);
+          };
+        } else {
+          drillBtn.style.display = 'none';
+        }
+      }
+
+      // Render Questions Breakdown
+      const questionsContainer = document.getElementById('detail-questions-list');
+      questionsContainer.innerHTML = '';
+
+      data.quiz.questions.forEach((q, idx) => {
+        const userVal = userAnswers[q.id] !== undefined ? userAnswers[q.id] : userAnswers[String(q.id)];
+        const item = this.renderQuestionReviewItem(q, idx, userVal, posMarks, negMarks);
+        questionsContainer.appendChild(item);
+      });
+
+    } catch (err) {
+      this.showToast(`Error inspecting attempt: ${err.message}`, 'error');
+    }
+  },
+
+  startMissedQuestionsDrill(quiz, userAnswers = {}) {
+    if (!quiz || !quiz.questions) return;
+
+    // Filter to only missed questions (either not answered, or incorrect)
+    const missedQuestions = quiz.questions.filter(q => {
+      const userVal = userAnswers[q.id] !== undefined ? userAnswers[q.id] : userAnswers[String(q.id)];
+      if (q.question_type === 'integer') {
+        if (userVal === undefined || userVal === null || String(userVal).trim() === '') return true;
+        const corrVal = q.correct_numerical_value;
+        const tol = parseFloat(q.numerical_tolerance || 0);
+        try {
+          return !(corrVal !== null && corrVal !== undefined && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol);
+        } catch (e) {
+          return true;
+        }
+      } else {
+        const correctOpt = (q.options || []).find(o => o.is_correct);
+        return !(userVal !== undefined && correctOpt && userVal === correctOpt.id);
+      }
+    });
+
+    if (missedQuestions.length === 0) {
+      this.showToast('No missed questions! You achieved 100% on this assessment.', 'success');
+      return;
+    }
+
+    const drillQuiz = {
+      id: quiz.id,
+      title: `[Drill] ${quiz.title}`,
+      description: `Targeted practice for ${missedQuestions.length} missed question${missedQuestions.length > 1 ? 's' : ''}`,
+      category: quiz.category || 'Weak-Spot Drill',
+      time_limit_minutes: 0,
+      questions: JSON.parse(JSON.stringify(missedQuestions))
+    };
+
+    this.switchView('player');
+    QuizPlayer.startQuiz(drillQuiz, 'drill', quiz);
+    this.showToast(`Starting drill: ${missedQuestions.length} missed question${missedQuestions.length > 1 ? 's' : ''}`, 'info');
+  },
+
+  async startQuiz(quizId, mode = 'exam') {
+    try {
+      const quiz = await API.getQuiz(quizId);
+      if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+        this.showToast('This assessment has no questions yet', 'error');
+        return;
+      }
+      this.switchView('player');
+      QuizPlayer.startQuiz(quiz, mode);
+    } catch (err) {
+      this.showToast(`Error starting assessment: ${err.message}`, 'error');
+    }
+  },
+
+  async editQuiz(quizId) {
+    try {
+      const quiz = await API.getQuiz(quizId);
+      if (!quiz) return;
+      this.switchView('builder');
+      QuizBuilder.loadQuizForEditing(quiz);
+    } catch (err) {
+      this.showToast(`Error loading assessment: ${err.message}`, 'error');
+    }
+  },
+
+  async deleteQuiz(quizId, title) {
+    if (confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
+      try {
+        await API.deleteQuiz(quizId);
+        this.showToast('Assessment deleted successfully', 'success');
+        this.showDashboard();
+      } catch (err) {
+        this.showToast(`Delete failed: ${err.message}`, 'error');
+      }
+    }
+  },
+
+  showBuilder() {
+    this.switchView('builder');
+    QuizBuilder.initNewQuiz();
+  },
+
+  showResults(data) {
+    this.lastCompletedQuiz = data.quiz;
+    this.switchView('results');
+    this.refreshHistoryBadge();
+
+    const posMarks = (data.quiz && data.quiz.positive_marks !== undefined && data.quiz.positive_marks !== null) ? parseFloat(data.quiz.positive_marks) : 4.0;
+    const negMarks = (data.quiz && data.quiz.negative_marks !== undefined && data.quiz.negative_marks !== null) ? parseFloat(data.quiz.negative_marks) : 1.0;
+    const grossEarned = data.positiveScore !== undefined ? data.positiveScore : (data.score * posMarks);
+    const penaltyMarks = data.negativePenalty !== undefined ? data.negativePenalty : 0;
+    const netMarks = data.netMarks !== undefined ? data.netMarks : (grossEarned - penaltyMarks);
+    const maxMarks = data.maxMarks !== undefined ? data.maxMarks : (data.total * posMarks);
+
+    const percent = Math.round((data.score / data.total) * 100);
+    document.getElementById('results-percent').textContent = `${netMarks > 0 ? '+' : ''}${netMarks}`;
+    const percentLabel = document.getElementById('results-percent-label');
+    if (percentLabel) percentLabel.textContent = `Out of ${maxMarks} Max Marks`;
+
+    const statusBadge = document.getElementById('results-status-badge');
+    const circle = document.getElementById('results-score-circle');
+    const jeePill = document.getElementById('results-jee-marks-pill');
+    if (jeePill) {
+      jeePill.textContent = `Net: ${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks} Marks`;
+    }
+
+    if (data.isDrill && data.score === data.total) {
+      statusBadge.textContent = 'Weak-Spots Mastered! (100%)';
+      statusBadge.className = 'badge badge-emerald';
+      circle.style.borderColor = 'var(--accent-emerald)';
+      this.showToast('Weak-spots conquered! 100% accuracy on drilled questions.', 'success');
+    } else if (percent >= 70) {
+      statusBadge.textContent = 'Passed (≥ 70%)';
+      statusBadge.className = 'badge badge-emerald';
+      circle.style.borderColor = 'var(--accent-emerald)';
+    } else {
+      statusBadge.textContent = 'Needs Review (< 70%)';
+      statusBadge.className = 'badge badge-rose';
+      circle.style.borderColor = 'var(--accent-rose)';
+    }
+
+    // Configure Drill Missed button
+    const missedQuestions = (data.quiz.questions || []).filter(q => {
+      const userVal = data.userAnswers[q.id] !== undefined ? data.userAnswers[q.id] : data.userAnswers[String(q.id)];
+      if (q.question_type === 'integer') {
+        if (userVal === undefined || userVal === null || String(userVal).trim() === '') return true;
+        const corrVal = q.correct_numerical_value;
+        const tol = parseFloat(q.numerical_tolerance || 0);
+        try {
+          return !(corrVal !== null && corrVal !== undefined && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol);
+        } catch (e) {
+          return true;
+        }
+      } else {
+        const correctOpt = (q.options || []).find(o => o.is_correct);
+        return !(userVal !== undefined && correctOpt && userVal === correctOpt.id);
+      }
+    });
+
+    const missedCount = missedQuestions.length;
+    const drillBtn = document.getElementById('btn-results-drill-missed');
+    const drillLabel = document.getElementById('results-drill-label');
+    if (drillBtn) {
+      if (missedCount > 0) {
+        drillBtn.style.display = 'inline-flex';
+        if (drillLabel) drillLabel.textContent = `Drill Missed (${missedCount})`;
+        drillBtn.onclick = () => {
+          this.startMissedQuestionsDrill(data.originalQuiz || data.quiz, data.userAnswers);
+        };
+      } else {
+        drillBtn.style.display = 'none';
+      }
+    }
+
+    // Summary boxes
+    const correctCount = data.score;
+    let answeredCount = 0;
+    (data.quiz.questions || []).forEach(q => {
+      const uVal = data.userAnswers[q.id] !== undefined ? data.userAnswers[q.id] : data.userAnswers[String(q.id)];
+      if (uVal !== undefined && uVal !== null && String(uVal).trim() !== '') {
+        answeredCount++;
+      }
+    });
+    const incorrectCount = answeredCount - correctCount;
+    const skippedCount = data.total - answeredCount;
+
+    const grossEl = document.getElementById('summary-gross-marks');
+    if (grossEl) grossEl.textContent = `+${grossEarned}`;
+    const penEl = document.getElementById('summary-penalty-marks');
+    if (penEl) penEl.textContent = `-${penaltyMarks}`;
+    const netEl = document.getElementById('summary-net-marks');
+    if (netEl) netEl.textContent = `${netMarks > 0 ? '+' : ''}${netMarks} / ${maxMarks}`;
+
+    document.getElementById('summary-correct').textContent = correctCount;
+    document.getElementById('summary-incorrect').textContent = incorrectCount;
+    document.getElementById('summary-skipped').textContent = skippedCount;
+
+    const mins = Math.floor(data.timeTaken / 60);
+    const secs = data.timeTaken % 60;
+    document.getElementById('summary-time').textContent = `${mins}m ${secs}s`;
+
+    // Render Detailed Question Review
+    const reviewContainer = document.getElementById('results-review-list');
+    reviewContainer.innerHTML = '';
+
+    data.quiz.questions.forEach((q, idx) => {
+      const userVal = data.userAnswers[q.id] !== undefined ? data.userAnswers[q.id] : data.userAnswers[String(q.id)];
+      const item = this.renderQuestionReviewItem(q, idx, userVal, posMarks, negMarks);
+      reviewContainer.appendChild(item);
+    });
+  },
+
+  renderQuestionReviewItem(q, idx, userVal, posMarks, negMarks) {
+    const isInteger = q.question_type === 'integer';
+    let isCorrect = false;
+    let hasAnswered = false;
+    let marksBadgeHtml = '';
+
+    if (isInteger) {
+      hasAnswered = userVal !== undefined && userVal !== null && String(userVal).trim() !== '';
+      const corrVal = q.correct_numerical_value;
+      const tol = parseFloat(q.numerical_tolerance || 0);
+      try {
+        isCorrect = hasAnswered && (corrVal !== null && corrVal !== undefined) && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol;
+      } catch (e) {}
+
+      if (isCorrect) {
+        marksBadgeHtml = `<span class="badge badge-emerald" style="font-size:0.75rem;">+${posMarks} Marks</span>`;
+      } else if (hasAnswered) {
+        // STRICT JEE RULE: Zero negative penalty for numerical / integer questions!
+        marksBadgeHtml = `<span class="badge badge-slate" style="font-size:0.75rem;">0 Marks (No Penalty)</span>`;
+      } else {
+        marksBadgeHtml = `<span class="badge badge-slate" style="font-size:0.75rem;">0 Marks (Unattempted)</span>`;
+      }
+    } else {
+      hasAnswered = userVal !== undefined && userVal !== null;
+      const correctOpt = (q.options || []).find(o => o.is_correct);
+      isCorrect = hasAnswered && correctOpt && userVal === correctOpt.id;
+
+      if (isCorrect) {
+        marksBadgeHtml = `<span class="badge badge-emerald" style="font-size:0.75rem;">+${posMarks} Marks</span>`;
+      } else if (hasAnswered) {
+        marksBadgeHtml = `<span class="badge badge-rose" style="font-size:0.75rem;">-${negMarks} Penalty</span>`;
+      } else {
+        marksBadgeHtml = `<span class="badge badge-slate" style="font-size:0.75rem;">0 Marks (Unattempted)</span>`;
+      }
+    }
+
+    const item = document.createElement('div');
+    item.className = `review-item ${isCorrect ? 'is-correct-item' : (hasAnswered ? 'is-incorrect-item' : 'is-neutral-item')}`;
+
+    let imageHtml = '';
+    if (q.image_url) {
+      imageHtml = `
+        <div class="review-image-box" onclick="App.openLightbox('${q.image_url}')" title="Click to enlarge diagram">
+          <img src="${q.image_url}" alt="Question Diagram" />
+        </div>
+      `;
+    }
+
+    let answerContentHtml = '';
+    if (isInteger) {
+      const corrVal = q.correct_numerical_value;
+      const tol = parseFloat(q.numerical_tolerance || 0);
+      answerContentHtml = `
+        <div style="background:var(--bg-surface-elevated); padding:0.85rem 1rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.85rem; color:var(--text-secondary);">Your Input:</span>
+            <span style="font-family:var(--font-mono); font-weight:600; color:${hasAnswered ? (isCorrect ? 'var(--accent-emerald)' : 'var(--accent-rose)') : 'var(--text-muted)'};">
+              ${hasAnswered ? this.escapeHtml(String(userVal)) : 'Not Attempted'}
+            </span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.85rem; color:var(--text-secondary);">Correct Value:</span>
+            <span style="font-family:var(--font-mono); font-weight:600; color:var(--accent-emerald);">
+              ${corrVal !== null && corrVal !== undefined ? corrVal : 'N/A'}${tol > 0 ? ` (±${tol})` : ''}
+            </span>
+          </div>
+        </div>
+      `;
+    } else {
+      let optionsHtml = '';
+      (q.options || []).forEach((opt) => {
+        let optClass = 'opt-neutral';
+        let label = '';
+        if (opt.is_correct) {
+          optClass = 'opt-correct';
+          label = '✓ Correct Answer';
+        } else if (hasAnswered && userVal === opt.id) {
+          optClass = 'opt-wrong-choice';
+          label = '✗ Your Choice';
+        }
+
+        optionsHtml += `
+          <div class="review-opt ${optClass}">
+            <span>${this.formatMathText(opt.option_text)}</span>
+            ${label ? `<small style="font-weight:600;">${label}</small>` : ''}
+          </div>
+        `;
+      });
+      answerContentHtml = `<div class="review-options">${optionsHtml}</div>`;
+    }
+
+    const statusLabel = isCorrect ? '✓ Correct' : (hasAnswered ? '✗ Incorrect' : '○ Unattempted');
+    const statusColor = isCorrect ? 'var(--accent-emerald)' : (hasAnswered ? 'var(--accent-rose)' : 'var(--text-dim)');
+
+    item.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+        <div class="review-q-num" style="color: ${statusColor};">
+          Question ${idx + 1} (${isInteger ? 'Section B · Numerical' : 'Section A · MCQ'}) — ${statusLabel}
+        </div>
+        ${marksBadgeHtml}
+      </div>
+      <div class="review-q-text">${this.formatMathText(q.question_text)}</div>
+      ${imageHtml}
+      ${answerContentHtml}
+      ${q.explanation ? `
+        <div class="explanation-box" style="margin-top: 0.75rem;">
+          <div class="explanation-title">Explanation</div>
+          <div class="explanation-text">${this.formatMathText(q.explanation)}</div>
+        </div>
+      ` : ''}
+    `;
+
+    return item;
+  },
+
+  openLightbox(src) {
+    const modal = document.getElementById('lightbox-modal');
+    const img = document.getElementById('lightbox-img');
+    img.src = src;
+    modal.classList.add('active');
+  },
+
+  closeLightbox() {
+    const modal = document.getElementById('lightbox-modal');
+    modal.classList.remove('active');
+  },
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+
+    let iconSvg = '';
+    if (type === 'success') {
+      iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+    } else if (type === 'error') {
+      iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    } else {
+      iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+    }
+
+    toast.innerHTML = `${iconSvg}<span>${this.escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      toast.style.transition = 'all 0.2s ease';
+      setTimeout(() => toast.remove(), 200);
+    }, 3000);
+  },
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  },
+
+  formatMathText(str) {
+    if (!str) return '';
+    if (typeof str !== 'string') str = String(str);
+
+    // If KaTeX is not loaded yet or in non-browser context, use fallback
+    if (typeof katex === 'undefined') {
+      return this._fallbackFormatMath(str);
+    }
+
+    try {
+      let text = str;
+
+      // 0. Normalize accidental escaped entities and double-backslashes before commands
+      text = text.replace(/&amp;/g, '&');
+      text = text.replace(/\\([a-zA-Z])/g, (m, c) => '\\' + c);
+      // If there are literal double backslashes before letters (e.g. \\begin, \\frac, \\ce)
+      text = text.replace(/\\\\([a-zA-Z])/g, '\\$1');
+      // Normalize quadruple backslashes to double backslashes for matrix row breaks
+      while (text.indexOf('\\\\\\\\') !== -1) {
+        text = text.replace(/\\\\\\\\/g, '\\\\');
+      }
+
+      const ktxBlocks = [];
+      const storeBlock = (html) => {
+        const id = '@@KTXBLOCK' + ktxBlocks.length + 'Z@@';
+        ktxBlocks.push({ id, html });
+        return id;
+      };
+
+      // 1. Process explicit display math: $$...$$ or \[...\]
+      text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+        try {
+          return storeBlock(katex.renderToString(math.trim(), { displayMode: true, throwOnError: false }));
+        } catch (e) {
+          return storeBlock(`<span class="katex-error">${this.escapeHtml(math)}</span>`);
+        }
+      });
+      text = text.replace(/\\\[([\s\S]*?)\\\]/g, (match, math) => {
+        try {
+          return storeBlock(katex.renderToString(math.trim(), { displayMode: true, throwOnError: false }));
+        } catch (e) {
+          return storeBlock(`<span class="katex-error">${this.escapeHtml(math)}</span>`);
+        }
+      });
+
+      // 2. Process explicit inline math: $...$ or \(...\)
+      text = text.replace(/(^|[^\\])\$([^\$]+)\$/g, (match, prefix, math) => {
+        try {
+          return prefix + storeBlock(katex.renderToString(math.trim(), { displayMode: false, throwOnError: false }));
+        } catch (e) {
+          return prefix + storeBlock(`<span class="katex-error">${this.escapeHtml(math)}</span>`);
+        }
+      });
+      text = text.replace(/\\\(([\s\S]*?)\\\)/g, (match, math) => {
+        try {
+          return storeBlock(katex.renderToString(math.trim(), { displayMode: false, throwOnError: false }));
+        } catch (e) {
+          return storeBlock(`<span class="katex-error">${this.escapeHtml(math)}</span>`);
+        }
+      });
+
+      // 3. Process raw LaTeX environments without delimiters: determinants, matrices, cases, aligned
+      const envRegex = /\\begin\{(vmatrix|Vmatrix|matrix|pmatrix|bmatrix|Bmatrix|cases|aligned|align|array)\}[\s\S]*?\\end\{\1\}/g;
+      text = text.replace(envRegex, (match) => {
+        try {
+          return storeBlock(katex.renderToString(match.trim(), { displayMode: false, throwOnError: false }));
+        } catch (e) {
+          return storeBlock(`<span class="katex-error">${this.escapeHtml(match)}</span>`);
+        }
+      });
+
+      // 4. Process raw chemical equations: \ce{...} or \pu{...} without delimiters
+      const chemRegex = /\\(ce|pu)\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g;
+      text = text.replace(chemRegex, (match) => {
+        try {
+          return storeBlock(katex.renderToString(match.trim(), { displayMode: false, throwOnError: false }));
+        } catch (e) {
+          return storeBlock(`<span class="katex-error">${this.escapeHtml(match)}</span>`);
+        }
+      });
+
+      // 5. If the entire string is a standalone LaTeX formula (e.g. \frac{1}{\sqrt{2}} or \vec{F}=m\vec{a})
+      const isStandaloneLatex = /^\s*\\([a-zA-Z]+|\^|_)/.test(text) && ktxBlocks.length === 0;
+      if (isStandaloneLatex) {
+        try {
+          return katex.renderToString(text.trim(), { displayMode: false, throwOnError: false });
+        } catch (e) {
+          // Fall through to inline replacement
+        }
+      }
+
+      // 6. Process common standalone TeX commands in mixed text: \frac, \sqrt, \vec, \hat, greek letters
+      const inlineSymbolsRegex = /\\(frac\{[^{}]+\}\{[^{}]+\}|sqrt\{[^{}]+\}|vec\{[a-zA-Z0-9]\}+|hat\{[a-zA-Z0-9]\}+|alpha|beta|gamma|theta|pi|lambda|mu|omega|Delta|Omega|degree|pm|approx|neq|le|ge|infty|times|div|int)/g;
+      text = text.replace(inlineSymbolsRegex, (match) => {
+        try {
+          return storeBlock(katex.renderToString(match, { displayMode: false, throwOnError: false }));
+        } catch (e) {
+          return match;
+        }
+      });
+
+      // 7. For non-KaTeX text segments, escape HTML and apply subtle plain-text formatting (1st, 2nd, x^2)
+      let result = this._formatPlainTextMath(text);
+
+      // 8. Restore protected KaTeX blocks
+      for (let i = 0; i < ktxBlocks.length; i++) {
+        result = result.split(ktxBlocks[i].id).join(ktxBlocks[i].html);
+      }
+
+      return result;
+
+    } catch (outerErr) {
+      console.warn('LaTeX parse error:', outerErr);
+      return this._fallbackFormatMath(str);
+    }
+  },
+
+  _formatPlainTextMath(rawText) {
+    if (!rawText) return '';
+    let text = this.escapeHtml(rawText);
+
+    // Simple superscripts & ordinals in plain text
+    text = text.replace(/([a-zA-Z0-9\)])\^\{([^{}]+)\}/g, '$1<sup>$2</sup>');
+    text = text.replace(/([a-zA-Z0-9\)])\^([a-zA-Z0-9\+\-]+)/g, '$1<sup>$2</sup>');
+    text = text.replace(/\b(\d+)(st|nd|rd|th)\b/g, '$1<sup>$2</sup>');
+    text = text.replace(/\b([nNkK])\-?th\b/g, '$1<sup>th</sup>');
+
+    // Simple subscripts in plain text
+    text = text.replace(/([a-zA-Z0-9\)])\_\{([^{}]+)\}/g, '$1<sub>$2</sub>');
+    text = text.replace(/([a-zA-Z0-9\)])\_([a-zA-Z0-9]+)/g, '$1<sub>$2</sub>');
+
+    return text;
+  },
+
+  _fallbackFormatMath(str) {
+    if (!str) return '';
+    let text = this.escapeHtml(str);
+
+    text = text.replace(/\\hat\{i\}/g, '<span class="math-vector">î</span>')
+               .replace(/\\hat\{j\}/g, '<span class="math-vector">ĵ</span>')
+               .replace(/\\hat\{k\}/g, '<span class="math-vector">k̂</span>')
+               .replace(/\\vec\{([a-zA-Z])\}/g, '<span class="math-vector">$1&#8407;</span>');
+
+    text = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '<span class="math-frac"><span class="math-num">$1</span><span class="math-den">$2</span></span>');
+    text = text.replace(/\\sqrt\{([^{}]+)\}/g, '&radic;<span class="math-sqrt">$1</span>');
+    text = text.replace(/\\text\{([^{}]+)\}/g, '$1');
+
+    text = text.replace(/([a-zA-Z0-9\)])\^\{([^{}]+)\}/g, '$1<sup>$2</sup>');
+    text = text.replace(/([a-zA-Z0-9\)])\^([a-zA-Z0-9\+\-]+)/g, '$1<sup>$2</sup>');
+    text = text.replace(/\b(\d+)(st|nd|rd|th)\b/g, '$1<sup>$2</sup>');
+    text = text.replace(/\b([nNkK])\-?th\b/g, '$1<sup>th</sup>');
+    text = text.replace(/([a-zA-Z0-9\)])\_\{([^{}]+)\}/g, '$1<sub>$2</sub>');
+    text = text.replace(/([a-zA-Z0-9\)])\_([a-zA-Z0-9]+)/g, '$1<sub>$2</sub>');
+
+    const mathMap = {
+      '\\\\alpha': '&alpha;', '\\\\beta': '&beta;', '\\\\gamma': '&gamma;',
+      '\\\\theta': '&theta;', '\\\\lambda': '&lambda;', '\\\\mu': '&mu;',
+      '\\\\pi': '&pi;', '\\\\omega': '&omega;', '\\\\Delta': '&Delta;',
+      '\\\\Omega': '&Omega;', '\\\\pm': '&plusmn;', '\\\\times': '&times;',
+      '\\\\div': '&divide;', '\\\\approx': '&asymp;', '\\\\neq': '&ne;',
+      '\\\\le': '&le;', '\\\\ge': '&ge;', '\\\\infty': '&infin;',
+      '\\\\int': '&int;', '\\\\degree': '&deg;'
+    };
+    for (const [pattern, rep] of Object.entries(mathMap)) {
+      text = text.replace(new RegExp(pattern, 'g'), rep);
+    }
+
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-display">$1</span>');
+    text = text.replace(/\$([^\$]+)\$/g, '<span class="math-inline">$1</span>');
+
+    return text;
+  },
+
+  closeApplication() {
+    // 1. Native WebKit message handler for direct Libadwaita window exit
+    try {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.closeApp) {
+        window.webkit.messageHandlers.closeApp.postMessage('quit');
+        return;
+      }
+    } catch (e) {
+      console.warn('WebKit messageHandler unavailable:', e);
+    }
+
+    // 2. HTTP shutdown signal to offline server
+    try {
+      fetch('/api/app/quit', { method: 'POST' }).catch(() => {});
+      fetch('/api/app/quit', { method: 'GET' }).catch(() => {});
+    } catch (e) {}
+
+    // 3. Browser window.close()
+    try {
+      window.close();
+    } catch (e) {}
+
+    // 4. Elegant termination screen if browser security sandbox blocks tab closure
+    setTimeout(() => {
+      document.body.innerHTML = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#0c0d0f; color:#a1a1aa; font-family:system-ui,-apple-system,sans-serif; user-select:none;">
+          <div style="width:44px; height:44px; border-radius:8px; background:#1a1b20; border:1px solid #2a2c35; display:flex; align-items:center; justify-content:center; color:#e4e4e7; margin-bottom:1.25rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+          <h2 style="font-size:1.15rem; font-weight:600; color:#ffffff; margin-bottom:0.4rem; letter-spacing:-0.01em;">Session Terminated</h2>
+          <p style="font-size:0.875rem; color:#71717a;">QuizMaster has shut down. You may safely close this window.</p>
+        </div>
+      `;
+    }, 150);
+  }
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+  App.init();
+});
