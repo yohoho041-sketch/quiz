@@ -27,6 +27,8 @@ class TestQuizApp(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Point database to an isolated test db so user's real database is never touched
+        cls.orig_turso_url = database.TURSO_DATABASE_URL
+        database.TURSO_DATABASE_URL = None
         cls.orig_db_path = database.DB_PATH
         cls.test_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_quiz.db")
         database.DB_PATH = cls.test_db_path
@@ -46,6 +48,7 @@ class TestQuizApp(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         database.DB_PATH = cls.orig_db_path
+        database.TURSO_DATABASE_URL = cls.orig_turso_url
         if os.path.exists(cls.test_db_path):
             try:
                 os.remove(cls.test_db_path)

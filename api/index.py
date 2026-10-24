@@ -11,8 +11,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# When running in serverless cloud, ensure /tmp/quiz.db is ready
-if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+# When running in serverless cloud, check if local fallback is needed
+if not os.environ.get("TURSO_DATABASE_URL") and (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")):
     default_db = os.path.join(BASE_DIR, "quiz.db")
     tmp_db = "/tmp/quiz.db"
     if not os.path.exists(tmp_db) and os.path.exists(default_db):

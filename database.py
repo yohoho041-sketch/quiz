@@ -1,38 +1,200 @@
 """
-SQLite Database Layer for Quiz App
+Database Layer for Quiz App
+Supports both Turso (libSQL over HTTP for Serverless/Vercel) and local SQLite (for offline use).
 Handles schema initialization, CRUD operations for quizzes, questions, options, and attempts.
-Runs 100% offline with Python standard library sqlite3.
+Runs with Python standard library, zero pip dependencies required.
 """
 
 import os
 import sqlite3
 import json
+import urllib.request
+import base64
 from typing import List, Dict, Any, Optional
 
+def _load_env_file():
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip('"').strip("'")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+_load_env_file()
+
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quiz.db")
-DB_PATH = os.environ.get("DATABASE_PATH")
+DB_PATH = os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
-if not DB_PATH:
-    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-        tmp_db = "/tmp/quiz.db"
-        if not os.path.exists(tmp_db) and os.path.exists(DEFAULT_DB_PATH):
-            import shutil
-            try:
-                shutil.copyfile(DEFAULT_DB_PATH, tmp_db)
-            except Exception:
-                pass
-        DB_PATH = tmp_db
+
+# ==================== TURSO HTTP DRIVER ====================
+
+def _format_turso_arg(val):
+    if val is None:
+        return {"type": "null"}
+    elif isinstance(val, bool):
+        return {"type": "integer", "value": "1" if val else "0"}
+    elif isinstance(val, int):
+        return {"type": "integer", "value": str(val)}
+    elif isinstance(val, float):
+        return {"type": "float", "value": val}
+    elif isinstance(val, bytes):
+        return {"type": "blob", "base64": base64.b64encode(val).decode("utf-8")}
     else:
-        DB_PATH = DEFAULT_DB_PATH
+        return {"type": "text", "value": str(val)}
 
 
-def get_db_connection() -> sqlite3.Connection:
+def _parse_turso_val(val_dict):
+    if not val_dict or val_dict.get("type") == "null":
+        return None
+    t = val_dict.get("type")
+    v = val_dict.get("value")
+    if t == "integer":
+        return int(v)
+    elif t == "float":
+        return float(v)
+    elif t == "blob":
+        return base64.b64decode(val_dict.get("base64", ""))
+    return v
+
+
+class TursoRow(dict):
+    """Row object that supports dict-key access, tuple index access, and dict() conversion."""
+    def __init__(self, cols, vals):
+        super().__init__()
+        self._keys = cols
+        self._vals = vals
+        for c, v in zip(cols, vals):
+            self[c] = v
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self._vals[item]
+        return super().__getitem__(item)
+
+    def keys(self):
+        return self._keys
+
+
+class TursoCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self.description = None
+        self.lastrowid = None
+        self.rowcount = 0
+        self._rows = []
+        self._pos = 0
+
+    def execute(self, sql: str, params: Any = ()):
+        cols, rows, last_id, affected = self.conn._execute_stmt(sql, params)
+        self.lastrowid = int(last_id) if last_id is not None else None
+        self.rowcount = affected
+        self.description = [(c, None, None, None, None, None, None) for c in cols] if cols else None
+        self._rows = [TursoRow(cols, r) for r in rows]
+        self._pos = 0
+        return self
+
+    def executemany(self, sql: str, seq_of_params: Any):
+        for params in seq_of_params:
+            self.execute(sql, params)
+        return self
+
+    def fetchone(self):
+        if self._pos < len(self._rows):
+            r = self._rows[self._pos]
+            self._pos += 1
+            return r
+        return None
+
+    def fetchall(self):
+        res = self._rows[self._pos:]
+        self._pos = len(self._rows)
+        return res
+
+
+class TursoConnection:
+    def __init__(self, db_url: str, token: str):
+        url = db_url.strip()
+        if url.startswith("libsql://"):
+            url = "https://" + url[len("libsql://"):]
+        elif not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+        self.db_url = url.rstrip("/")
+        self.token = token
+        self.row_factory = sqlite3.Row
+
+    def _execute_stmt(self, sql: str, params: Any = ()):
+        url = f"{self.db_url}/v2/pipeline"
+        args = [_format_turso_arg(p) for p in params]
+        stmt = {"sql": sql}
+        if args:
+            stmt["args"] = args
+        payload = {
+            "requests": [
+                {"type": "execute", "stmt": stmt},
+                {"type": "close"}
+            ]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = resp.read().decode("utf-8")
+            res = json.loads(body)
+
+        first = res.get("results", [{}])[0]
+        if first.get("type") == "error":
+            raise sqlite3.OperationalError(first.get("error", {}).get("message", "Turso error"))
+
+        result = first.get("response", {}).get("result", {})
+        cols = [c["name"] for c in result.get("cols", [])]
+        rows = []
+        for raw_row in result.get("rows", []):
+            parsed_row = [_parse_turso_val(cell) for cell in raw_row]
+            rows.append(parsed_row)
+
+        last_id = result.get("last_insert_rowid")
+        affected = result.get("affected_row_count", 0)
+        return cols, rows, last_id, affected
+
+    def cursor(self):
+        return TursoCursor(self)
+
+    def execute(self, sql: str, params: Any = ()):
+        cur = self.cursor()
+        return cur.execute(sql, params)
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def get_db_connection():
+    """Returns a Turso connection if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set,
+    otherwise connects to local SQLite."""
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
+        return TursoConnection(TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA synchronous = NORMAL;")
-    conn.execute("PRAGMA cache_size = -64000;")  # 64 MB cache
+    conn.execute("PRAGMA cache_size = -64000;")
     conn.execute("PRAGMA temp_store = MEMORY;")
     return conn
 
