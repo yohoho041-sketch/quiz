@@ -771,21 +771,24 @@ const QuizPlayer = {
     const maxMarks = Math.round((total * posMarks) * 100) / 100;
 
     try {
-      await API.recordAttempt(this.quiz.id, {
-        score: score,
-        total_questions: total,
-        time_taken_seconds: this.timeTakenSeconds,
-        answers: this.userAnswers,
-        positive_score: positiveScore,
-        negative_penalty: negativePenalty,
-        net_marks: netMarks,
-        max_marks: maxMarks,
-        violations_count: this.violationsCount,
-        violations_log: this.violationsLog,
-        is_disqualified: this.isDisqualified,
-        student_name: this.studentName || 'Anonymous Student',
-        student_roll: this.studentRoll || ''
-      });
+      const qid = parseInt(this.quiz.id, 10);
+      if (!isNaN(qid)) {
+        await API.recordAttempt(qid, {
+          score: score,
+          total_questions: total,
+          time_taken_seconds: this.timeTakenSeconds,
+          answers: this.userAnswers,
+          positive_score: positiveScore,
+          negative_penalty: negativePenalty,
+          net_marks: netMarks,
+          max_marks: maxMarks,
+          violations_count: this.violationsCount,
+          violations_log: this.violationsLog,
+          is_disqualified: this.isDisqualified,
+          student_name: this.studentName || 'Anonymous Student',
+          student_roll: this.studentRoll || ''
+        });
+      }
     } catch (e) {
       console.error('Failed to save attempt record:', e);
     }

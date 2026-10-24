@@ -282,6 +282,14 @@ const App = {
       this.showHistory();
     });
 
+    // 1-Click Adaptive Weak-Spot Revision Test
+    const btnWeakSpot = document.getElementById('btn-start-weak-spot-test');
+    if (btnWeakSpot) {
+      btnWeakSpot.addEventListener('click', () => {
+        this.startWeakSpotRevisionTest();
+      });
+    }
+
     // Nav Create button
     document.getElementById('btn-nav-create').addEventListener('click', () => {
       this.showBuilder();
@@ -649,8 +657,118 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       this.updateStatsRibbon(stats);
       this.renderDashboardCards();
       this.refreshHistoryBadge();
+      this.updateWeakSpotBanner();
     } catch (err) {
       this.showToast(`Error loading assessments: ${err.message}`, 'error');
+    }
+  },
+
+  async getWeakSpotPool() {
+    // Collect all missed and unattempted questions from past completed tests
+    const pool = new Map(); // question_id -> question object
+
+    try {
+      const attempts = await API.getAllAttempts();
+      if (!attempts || attempts.length === 0) return [];
+
+      for (const att of attempts) {
+        // Fetch attempt detail with full quiz questions & student answers
+        try {
+          const detail = await API.getAttemptDetail(att.attempt_id);
+          if (!detail || !detail.quiz || !detail.quiz.questions) continue;
+
+          const userAnswers = detail.answers || {};
+          detail.quiz.questions.forEach(q => {
+            const userVal = userAnswers[q.id] !== undefined ? userAnswers[q.id] : userAnswers[String(q.id)];
+            let isCorrect = false;
+
+            if (q.question_type === 'integer') {
+              const hasAnswered = userVal !== undefined && userVal !== null && String(userVal).trim() !== '';
+              const corrVal = q.correct_numerical_value;
+              const tol = parseFloat(q.numerical_tolerance || 0);
+              try {
+                isCorrect = hasAnswered && (corrVal !== null && corrVal !== undefined) && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol;
+              } catch (e) {
+                isCorrect = false;
+              }
+            } else {
+              const hasAnswered = userVal !== undefined && userVal !== null;
+              const correctOpt = (q.options || []).find(o => o.is_correct);
+              isCorrect = hasAnswered && correctOpt && userVal === correctOpt.id;
+            }
+
+            // If wrong or unattempted, add to weak spot pool
+            if (!isCorrect && !pool.has(q.id)) {
+              pool.set(q.id, {
+                ...q,
+                sourceQuizTitle: detail.quiz.title || 'Assignment'
+              });
+            }
+          });
+        } catch (e) {
+          // ignore single attempt load error
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return Array.from(pool.values());
+  },
+
+  async updateWeakSpotBanner() {
+    const banner = document.getElementById('weak-spot-banner');
+    const countEl = document.getElementById('weak-spot-count');
+    if (!banner) return;
+
+    try {
+      const pool = await this.getWeakSpotPool();
+      if (pool.length > 0) {
+        banner.style.display = 'flex';
+        if (countEl) countEl.textContent = `${pool.length} Question${pool.length === 1 ? '' : 's'} in Pool`;
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch (e) {
+      banner.style.display = 'none';
+    }
+  },
+
+  async startWeakSpotRevisionTest() {
+    this.showToast('Assembling targeted revision test...', 'info');
+    try {
+      const pool = await this.getWeakSpotPool();
+      if (!pool || pool.length === 0) {
+        this.showToast('No wrong or unattempted questions found! You are all caught up.', 'success');
+        return;
+      }
+
+      // Shuffle pool using Fisher-Yates
+      const shuffled = [...pool];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      // Select up to 10 questions (if list shorter than 10, take all)
+      const selectedQuestions = shuffled.slice(0, 10);
+
+      const customQuiz = {
+        id: `weak_spot_${Date.now()}`,
+        title: `Targeted Revision Test (${selectedQuestions.length} Questions)`,
+        description: `Randomly selected from your past wrong & unattempted questions across all assignments.`,
+        category: 'Weak-Spot Revision',
+        positive_marks: 4,
+        negative_marks: 1,
+        time_limit_minutes: selectedQuestions.length * 2, // 2 mins per question
+        questions: selectedQuestions
+      };
+
+      this.switchView('player');
+      QuizPlayer.startQuiz(customQuiz, 'exam');
+      this.showToast(`Starting revision test with ${selectedQuestions.length} questions!`, 'success');
+    } catch (err) {
+      this.showToast(`Error creating revision test: ${err.message}`, 'error');
     }
   },
 

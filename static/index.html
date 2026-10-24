@@ -126,6 +126,32 @@
         </div>
       </div>
 
+      <!-- 1-Click Adaptive Weak-Spot Drill Banner (Wrong & Unattempted Questions) -->
+      <div id="weak-spot-banner" style="display:none; margin-bottom:1.5rem; background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-md); padding: 1.15rem 1.5rem; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div style="display:flex; align-items:center; gap:0.85rem;">
+          <div style="width:38px; height:38px; border-radius:var(--radius-sm); background:rgba(239, 68, 68, 0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-rose); flex-shrink:0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-weight:600; font-size:0.95rem; color:var(--text-primary); display:flex; align-items:center; gap:0.5rem;">
+              <span>Targeted Revision Practice</span>
+              <span class="badge badge-rose" id="weak-spot-count" style="font-size:0.7rem;">0 Questions</span>
+            </div>
+            <p style="font-size:0.825rem; color:var(--text-secondary); margin:0.15rem 0 0 0;">
+              Generate a fast 10-question random test pulled from questions you previously missed or left unattempted across all assignments.
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-start-weak-spot-test" style="gap:0.5rem; white-space:nowrap;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Start 10-Q Revision Test</span>
+        </button>
+      </div>
+
       <!-- Quizzes Grid -->
       <div class="quizzes-grid" id="quizzes-grid">
         <!-- Populated by JS -->
