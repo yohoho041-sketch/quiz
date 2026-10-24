@@ -635,6 +635,91 @@ class TestQuizApp(unittest.TestCase):
             data = json.loads(resp.read().decode("utf-8"))
             self.assertTrue(data["success"])
 
+    def test_12_atomic_idempotent_quiz_creation_and_submission(self):
+        """Test rapid duplicate requests return idempotent responses without duplicate records."""
+        quiz_payload = {
+            "title": "Idempotency Test Quiz",
+            "subject": "Testing",
+            "grade": "12",
+            "difficulty": "Easy",
+            "time_limit_minutes": 5,
+            "questions": [
+                {
+                    "question_text": "Is duplicate creation prevented?",
+                    "options": [
+                        {"option_text": "Yes", "is_correct": True},
+                        {"option_text": "No", "is_correct": False}
+                    ]
+                }
+            ]
+        }
+
+        # 1. First POST /api/quizzes
+        req1 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=json.dumps(quiz_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req1) as resp1:
+            self.assertEqual(resp1.status, 201)
+            data1 = json.loads(resp1.read().decode("utf-8"))
+            quiz_id_1 = data1["quiz"]["id"]
+
+        # 2. Rapid duplicate POST /api/quizzes with same payload
+        req2 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=json.dumps(quiz_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req2) as resp2:
+            self.assertEqual(resp2.status, 201)
+            data2 = json.loads(resp2.read().decode("utf-8"))
+            quiz_id_2 = data2["quiz"]["id"]
+
+        # Must return the identical quiz ID from idempotency cache
+        self.assertEqual(quiz_id_1, quiz_id_2)
+
+        # 3. Test attempt submission idempotency
+        attempt_payload = {
+            "score": 1,
+            "total_questions": 1,
+            "time_taken_seconds": 25,
+            "student_name": "Atomic Student",
+            "student_roll": "123456",
+            "answers": {"1": "Yes"}
+        }
+
+        att_req1 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id_1}/attempts",
+            data=json.dumps(attempt_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(att_req1) as att_resp1:
+            self.assertEqual(att_resp1.status, 201)
+            att_data1 = json.loads(att_resp1.read().decode("utf-8"))
+            attempt_id_1 = att_data1["attempt_id"]
+
+        # Rapid duplicate attempt submission
+        att_req2 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id_1}/attempts",
+            data=json.dumps(attempt_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(att_req2) as att_resp2:
+            self.assertEqual(att_resp2.status, 201)
+            att_data2 = json.loads(att_resp2.read().decode("utf-8"))
+            attempt_id_2 = att_data2["attempt_id"]
+
+        # Must return the identical attempt ID
+        self.assertEqual(attempt_id_1, attempt_id_2)
+
+        # Cleanup test quiz
+        database.delete_quiz(quiz_id_1)
+
 
 if __name__ == "__main__":
     unittest.main()

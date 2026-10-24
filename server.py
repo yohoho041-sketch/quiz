@@ -10,6 +10,7 @@ import json
 import uuid
 import time
 import threading
+import hashlib
 import mimetypes
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -65,6 +66,25 @@ def record_pin_attempt(client_ip: str, is_success: bool):
         info["count"] += 1
         if info["count"] >= 5:
             info["locked_until"] = time.time() + 900  # Lock out for 15 minutes
+
+
+# Deduplication / idempotency for rapid duplicate clicks (Save Quiz / Submit Exam)
+_RECENT_IDEMPOTENT_RESPONSES = {}  # key -> (timestamp, status, response_data)
+
+def check_idempotent_request(key: str, window_seconds: float = 6.0):
+    now = time.time()
+    # Expire old records
+    expired = [k for k, v in _RECENT_IDEMPOTENT_RESPONSES.items() if now - v[0] > 120]
+    for k in expired:
+        _RECENT_IDEMPOTENT_RESPONSES.pop(k, None)
+
+    record = _RECENT_IDEMPOTENT_RESPONSES.get(key)
+    if record and (now - record[0]) < window_seconds:
+        return record[1], record[2]
+    return None, None
+
+def record_idempotent_response(key: str, status: int, data: dict):
+    _RECENT_IDEMPOTENT_RESPONSES[key] = (time.time(), status, data)
 
 
 class QuizRequestHandler(BaseHTTPRequestHandler):
@@ -319,9 +339,18 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             if not payload.get("questions"):
                 return self.send_error_json("Quiz must have at least one question", 400)
 
+            # Deduplication: prevent duplicate quiz records if teacher clicks Save multiple times
+            payload_str = json.dumps(payload, sort_keys=True)
+            dedup_key = f"quiz_create_{hashlib.sha256(payload_str.encode('utf-8')).hexdigest()}"
+            cached_status, cached_resp = check_idempotent_request(dedup_key, window_seconds=6.0)
+            if cached_resp is not None:
+                return self.send_json(cached_resp, status=cached_status)
+
             quiz_id = database.create_quiz(payload)
             created_quiz = database.get_quiz(quiz_id)
-            return self.send_json({"success": True, "quiz": created_quiz}, status=201)
+            resp_data = {"success": True, "quiz": created_quiz}
+            record_idempotent_response(dedup_key, 201, resp_data)
+            return self.send_json(resp_data, status=201)
 
         # POST /api/quizzes/<id>/attempts
         if len(parts) == 4 and parts[1] == "quizzes" and parts[3] == "attempts":
@@ -334,10 +363,19 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             if not quiz:
                 return self.send_error_json("Quiz not found", 404)
 
+            # Deduplication: prevent duplicate attempt records if student clicks Submit multiple times
+            student_roll = str(payload.get("student_roll", "")).strip()
+            student_name = str(payload.get("student_name", "Anonymous Student")).strip()
+            answers = payload.get("answers", {})
+            answers_str = json.dumps(answers, sort_keys=True)
+            dedup_key = f"attempt_{quiz_id}_{student_roll}_{hashlib.sha256(answers_str.encode('utf-8')).hexdigest()}"
+            cached_status, cached_resp = check_idempotent_request(dedup_key, window_seconds=10.0)
+            if cached_resp is not None:
+                return self.send_json(cached_resp, status=cached_status)
+
             score = int(payload.get("score", 0))
             total_questions = int(payload.get("total_questions", len(quiz["questions"])))
             time_taken = int(payload.get("time_taken_seconds", 0))
-            answers = payload.get("answers", {})
             pos_score = payload.get("positive_score")
             neg_pen = payload.get("negative_penalty")
             net_marks = payload.get("net_marks")
@@ -346,9 +384,6 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             violations_count = int(payload.get("violations_count", 0))
             violations_log = payload.get("violations_log", [])
             is_disqualified = bool(payload.get("is_disqualified", False))
-
-            student_name = payload.get("student_name", "Anonymous Student")
-            student_roll = payload.get("student_roll", "")
 
             attempt_id = database.record_attempt(
                 quiz_id, score, total_questions, time_taken, answers,
@@ -362,7 +397,9 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
                 student_name=student_name,
                 student_roll=student_roll
             )
-            return self.send_json({"success": True, "attempt_id": attempt_id}, status=201)
+            resp_data = {"success": True, "attempt_id": attempt_id}
+            record_idempotent_response(dedup_key, 201, resp_data)
+            return self.send_json(resp_data, status=201)
 
         return self.send_error_json("API route not found", 404)
 

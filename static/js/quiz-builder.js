@@ -787,6 +787,8 @@ const QuizBuilder = {
   },
 
   async saveQuiz() {
+    if (this._isSaving) return;
+
     const title = document.getElementById('input-quiz-title').value.trim();
     const description = document.getElementById('input-quiz-desc').value.trim();
     const category = document.getElementById('input-quiz-category').value.trim() || 'General';
@@ -859,6 +861,22 @@ const QuizBuilder = {
       questions: this.questions
     };
 
+    this._isSaving = true;
+    const saveBtn = document.getElementById('btn-builder-save');
+    const originalText = saveBtn ? saveBtn.innerHTML : '';
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = '0.65';
+      saveBtn.style.pointerEvents = 'none';
+      saveBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite;">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" />
+        </svg>
+        <span>Saving...</span>
+      `;
+    }
+
     try {
       if (this.editingQuizId) {
         await API.updateQuiz(this.editingQuizId, payload);
@@ -870,6 +888,14 @@ const QuizBuilder = {
       App.showDashboard();
     } catch (err) {
       App.showToast(`Failed to save: ${err.message}`, 'error');
+    } finally {
+      this._isSaving = false;
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '';
+        saveBtn.style.pointerEvents = '';
+        saveBtn.innerHTML = originalText;
+      }
     }
   },
 

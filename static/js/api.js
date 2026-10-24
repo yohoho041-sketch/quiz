@@ -65,29 +65,63 @@ const API = {
   },
 
   async createQuiz(quizData) {
-    const res = await fetch('/api/quizzes', {
-      method: 'POST',
-      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(quizData)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to create quiz');
+    const key = 'create_' + JSON.stringify(quizData);
+    if (this._inFlight && this._inFlight.has(key)) {
+      return this._inFlight.get(key);
     }
-    return await res.json();
+    if (!this._inFlight) this._inFlight = new Map();
+
+    const promise = (async () => {
+      try {
+        const res = await fetch('/api/quizzes', {
+          method: 'POST',
+          headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(quizData)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create quiz');
+        }
+        return await res.json();
+      } finally {
+        setTimeout(() => {
+          if (this._inFlight) this._inFlight.delete(key);
+        }, 2000);
+      }
+    })();
+
+    this._inFlight.set(key, promise);
+    return promise;
   },
 
   async updateQuiz(id, quizData) {
-    const res = await fetch(`/api/quizzes/${id}`, {
-      method: 'PUT',
-      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(quizData)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to update quiz');
+    const key = `update_${id}_` + JSON.stringify(quizData);
+    if (this._inFlight && this._inFlight.has(key)) {
+      return this._inFlight.get(key);
     }
-    return await res.json();
+    if (!this._inFlight) this._inFlight = new Map();
+
+    const promise = (async () => {
+      try {
+        const res = await fetch(`/api/quizzes/${id}`, {
+          method: 'PUT',
+          headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(quizData)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to update quiz');
+        }
+        return await res.json();
+      } finally {
+        setTimeout(() => {
+          if (this._inFlight) this._inFlight.delete(key);
+        }, 2000);
+      }
+    })();
+
+    this._inFlight.set(key, promise);
+    return promise;
   },
 
   async deleteQuiz(id) {
@@ -145,13 +179,30 @@ const API = {
   },
 
   async recordAttempt(quizId, attemptData) {
-    const res = await fetch(`/api/quizzes/${quizId}/attempts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attemptData)
-    });
-    if (!res.ok) throw new Error('Failed to save attempt');
-    return await res.json();
+    const key = `attempt_${quizId}_${attemptData.student_roll || ''}_${JSON.stringify(attemptData.answers || {})}`;
+    if (this._inFlight && this._inFlight.has(key)) {
+      return this._inFlight.get(key);
+    }
+    if (!this._inFlight) this._inFlight = new Map();
+
+    const promise = (async () => {
+      try {
+        const res = await fetch(`/api/quizzes/${quizId}/attempts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(attemptData)
+        });
+        if (!res.ok) throw new Error('Failed to save attempt');
+        return await res.json();
+      } finally {
+        setTimeout(() => {
+          if (this._inFlight) this._inFlight.delete(key);
+        }, 3000);
+      }
+    })();
+
+    this._inFlight.set(key, promise);
+    return promise;
   },
 
   async getAttempts(quizId) {

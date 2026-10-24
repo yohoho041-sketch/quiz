@@ -487,6 +487,7 @@ const QuizPlayer = {
   },
 
   confirmSubmit() {
+    if (this._isSubmitting) return;
     const total = this.quiz.questions.length;
     const answeredCount = Object.keys(this.userAnswers).length;
     const unanswered = total - answeredCount;
@@ -712,100 +713,128 @@ const QuizPlayer = {
   },
 
   async submitQuiz(forced = false) {
-    clearInterval(this.timerInterval);
-    this.detachKeyboardEvents();
-    this.deactivateAntiCheatingLockdown();
+    if (this._isSubmitting) return;
+    this._isSubmitting = true;
 
-    // Exit Fullscreen Mode
-    try {
-      if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      }
-    } catch (e) {}
-    document.body.classList.remove('fullscreen-test-mode');
-
-    let score = 0;
-    const total = this.quiz.questions.length;
-    const posMarks = (this.quiz.positive_marks !== undefined && this.quiz.positive_marks !== null) ? parseFloat(this.quiz.positive_marks) : 4.0;
-    const negMarks = (this.quiz.negative_marks !== undefined && this.quiz.negative_marks !== null) ? parseFloat(this.quiz.negative_marks) : 1.0;
-
-    let positiveScore = 0;
-    let negativePenalty = 0;
-
-    this.quiz.questions.forEach(q => {
-      const userVal = this.userAnswers[q.id];
-
-      if (q.question_type === 'integer') {
-        if (userVal !== undefined && userVal !== null && String(userVal).trim() !== '') {
-          const corrVal = q.correct_numerical_value;
-          const tol = parseFloat(q.numerical_tolerance || 0);
-          let isCorrect = false;
-          try {
-            isCorrect = (corrVal !== null && corrVal !== undefined) && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol;
-          } catch (e) {}
-
-          if (isCorrect) {
-            score++;
-            positiveScore += posMarks;
-          } else {
-            negativePenalty += 0;
-          }
-        }
-      } else {
-        if (userVal !== undefined && userVal !== null) {
-          const correctOpt = (q.options || []).find(o => o.is_correct);
-          if (correctOpt && correctOpt.id === userVal) {
-            score++;
-            positiveScore += posMarks;
-          } else {
-            negativePenalty += negMarks;
-          }
-        }
-      }
-    });
-
-    positiveScore = Math.round(positiveScore * 100) / 100;
-    negativePenalty = Math.round(negativePenalty * 100) / 100;
-    const netMarks = Math.round((positiveScore - negativePenalty) * 100) / 100;
-    const maxMarks = Math.round((total * posMarks) * 100) / 100;
-
-    try {
-      const qid = parseInt(this.quiz.id, 10);
-      if (!isNaN(qid)) {
-        await API.recordAttempt(qid, {
-          score: score,
-          total_questions: total,
-          time_taken_seconds: this.timeTakenSeconds,
-          answers: this.userAnswers,
-          positive_score: positiveScore,
-          negative_penalty: negativePenalty,
-          net_marks: netMarks,
-          max_marks: maxMarks,
-          violations_count: this.violationsCount,
-          violations_log: this.violationsLog,
-          is_disqualified: this.isDisqualified,
-          student_name: this.studentName || 'Anonymous Student',
-          student_roll: this.studentRoll || ''
-        });
-      }
-    } catch (e) {
-      console.error('Failed to save attempt record:', e);
+    const btnSubmit = document.getElementById('btn-submit-quiz');
+    const originalText = btnSubmit ? btnSubmit.innerHTML : '';
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.style.opacity = '0.65';
+      btnSubmit.style.pointerEvents = 'none';
+      btnSubmit.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 4px;">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" />
+        </svg>
+        <span>Submitting...</span>
+      `;
     }
 
-    App.showResults({
-      quiz: this.quiz,
-      userAnswers: this.userAnswers,
-      score: score,
-      total: total,
-      timeTaken: this.timeTakenSeconds,
-      isDrill: this.mode === 'drill',
-      originalQuiz: this.originalQuiz || this.quiz,
-      positiveScore: positiveScore,
-      negativePenalty: negativePenalty,
-      netMarks: netMarks,
-      maxMarks: maxMarks
-    });
+    try {
+      clearInterval(this.timerInterval);
+      this.detachKeyboardEvents();
+      this.deactivateAntiCheatingLockdown();
+
+      // Exit Fullscreen Mode
+      try {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+      } catch (e) {}
+      document.body.classList.remove('fullscreen-test-mode');
+
+      let score = 0;
+      const total = this.quiz.questions.length;
+      const posMarks = (this.quiz.positive_marks !== undefined && this.quiz.positive_marks !== null) ? parseFloat(this.quiz.positive_marks) : 4.0;
+      const negMarks = (this.quiz.negative_marks !== undefined && this.quiz.negative_marks !== null) ? parseFloat(this.quiz.negative_marks) : 1.0;
+
+      let positiveScore = 0;
+      let negativePenalty = 0;
+
+      this.quiz.questions.forEach(q => {
+        const userVal = this.userAnswers[q.id];
+
+        if (q.question_type === 'integer') {
+          if (userVal !== undefined && userVal !== null && String(userVal).trim() !== '') {
+            const corrVal = q.correct_numerical_value;
+            const tol = parseFloat(q.numerical_tolerance || 0);
+            let isCorrect = false;
+            try {
+              isCorrect = (corrVal !== null && corrVal !== undefined) && Math.abs(parseFloat(userVal) - parseFloat(corrVal)) <= tol;
+            } catch (e) {}
+
+            if (isCorrect) {
+              score++;
+              positiveScore += posMarks;
+            } else {
+              negativePenalty += 0;
+            }
+          }
+        } else {
+          if (userVal !== undefined && userVal !== null) {
+            const correctOpt = (q.options || []).find(o => o.is_correct);
+            if (correctOpt && correctOpt.id === userVal) {
+              score++;
+              positiveScore += posMarks;
+            } else {
+              negativePenalty += negMarks;
+            }
+          }
+        }
+      });
+
+      positiveScore = Math.round(positiveScore * 100) / 100;
+      negativePenalty = Math.round(negativePenalty * 100) / 100;
+      const netMarks = Math.round((positiveScore - negativePenalty) * 100) / 100;
+      const maxMarks = Math.round((total * posMarks) * 100) / 100;
+
+      try {
+        const qid = parseInt(this.quiz.id, 10);
+        if (!isNaN(qid)) {
+          await API.recordAttempt(qid, {
+            score: score,
+            total_questions: total,
+            time_taken_seconds: this.timeTakenSeconds,
+            answers: this.userAnswers,
+            positive_score: positiveScore,
+            negative_penalty: negativePenalty,
+            net_marks: netMarks,
+            max_marks: maxMarks,
+            violations_count: this.violationsCount,
+            violations_log: this.violationsLog,
+            is_disqualified: this.isDisqualified,
+            student_name: this.studentName || 'Anonymous Student',
+            student_roll: this.studentRoll || ''
+          });
+        }
+      } catch (e) {
+        console.error('Failed to save attempt record:', e);
+      }
+
+      App.showResults({
+        quiz: this.quiz,
+        userAnswers: this.userAnswers,
+        score: score,
+        total: total,
+        timeTaken: this.timeTakenSeconds,
+        isDrill: this.mode === 'drill',
+        originalQuiz: this.originalQuiz || this.quiz,
+        positiveScore: positiveScore,
+        negativePenalty: negativePenalty,
+        netMarks: netMarks,
+        maxMarks: maxMarks
+      });
+    } finally {
+      this._isSubmitting = false;
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.style.opacity = '';
+        btnSubmit.style.pointerEvents = '';
+        btnSubmit.innerHTML = originalText;
+      }
+    }
   },
 
   attachKeyboardEvents() {
