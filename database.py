@@ -30,7 +30,13 @@ def _load_env_file():
 _load_env_file()
 
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quiz.db")
-DB_PATH = os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
+DB_PATH = os.environ.get("DATABASE_PATH")
+if not DB_PATH:
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        DB_PATH = "/tmp/quiz.db"
+    else:
+        DB_PATH = DEFAULT_DB_PATH
+
 TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
 TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
