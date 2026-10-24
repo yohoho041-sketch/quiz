@@ -37,20 +37,18 @@ const App = {
     const historyTabLabel = document.getElementById('history-tab-label');
 
     if (this.isTeacherMode) {
-      if (navPortalTag) {
-        navPortalTag.textContent = 'Teacher Mode';
-        navPortalTag.className = 'brand-portal-tag teacher-active';
-      }
+      if (navPortalTag) navPortalTag.style.display = 'none';
       if (btnNavCreate) btnNavCreate.style.display = 'inline-flex';
       if (btnTeacherToggle) btnTeacherToggle.style.display = 'inline-flex';
-      if (teacherBanner) teacherBanner.classList.add('active');
-      if (teacherToggleLabel) teacherToggleLabel.textContent = 'Teacher Active';
+      if (teacherBanner) teacherBanner.classList.remove('active');
+      if (teacherToggleLabel) teacherToggleLabel.textContent = 'Exit Teacher Mode';
       if (teacherLockIcon) {
         teacherLockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>';
       }
       if (historyTabLabel) historyTabLabel.textContent = 'Submissions';
     } else {
       if (navPortalTag) {
+        navPortalTag.style.display = 'inline-block';
         navPortalTag.textContent = 'Student Portal';
         navPortalTag.className = 'brand-portal-tag';
       }

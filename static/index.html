@@ -84,16 +84,7 @@
     </div>
   </nav>
 
-  <!-- Teacher Mode Active Status Banner -->
-  <div class="teacher-mode-banner" id="teacher-mode-banner">
-    <div style="display:flex; align-items:center; gap:8px;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <span><b>Teacher Mode Active:</b> You have full authority to create, edit, delete assessments, and review student attempt scores.</span>
-    </div>
-    <button class="btn btn-outline btn-sm" id="btn-teacher-logout" style="padding:0.25rem 0.75rem; font-size:0.75rem; border-color:rgba(245, 158, 11, 0.4); color:#fbbf24;">
-      Switch to Student View
-    </button>
-  </div>
+  </nav>
 
   <!-- Main Container -->
   <main class="container">
@@ -241,6 +232,8 @@
             <div class="summary-val" id="detail-total-q">0</div>
             <div class="summary-key">Total Questions</div>
           </div>
+        </div>
+
         <div class="card" id="detail-audit-card" style="margin-top: 1.5rem; display: none;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <div style="font-weight: 600; font-size: 0.95rem; color: var(--accent-rose); display: flex; align-items: center; gap: 0.5rem;">
