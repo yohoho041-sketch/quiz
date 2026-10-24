@@ -19,11 +19,19 @@ const API = {
     }
   },
 
+  getStudentPin() {
+    return localStorage.getItem('quiz_student_pin') || '';
+  },
+
   getHeaders(extra = {}) {
     const headers = { ...extra };
     const pin = this.getTeacherPin();
     if (pin) {
       headers['X-Teacher-PIN'] = pin;
+    }
+    const studentPin = this.getStudentPin();
+    if (studentPin) {
+      headers['X-Student-PIN'] = studentPin;
     }
     return headers;
   },
@@ -154,14 +162,18 @@ const API = {
   },
 
   async getAllAttempts() {
-    const res = await fetch('/api/attempts');
+    const res = await fetch('/api/attempts', {
+      headers: this.getHeaders()
+    });
     if (!res.ok) return [];
     const data = await res.json();
     return data.attempts || [];
   },
 
   async getAttemptDetail(attemptId) {
-    const res = await fetch(`/api/attempts/${attemptId}`);
+    const res = await fetch(`/api/attempts/${attemptId}`, {
+      headers: this.getHeaders()
+    });
     if (!res.ok) throw new Error('Attempt details not found');
     const data = await res.json();
     return data.attempt;

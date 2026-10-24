@@ -246,22 +246,71 @@ class TestQuizApp(unittest.TestCase):
                     pass
 
     def test_06_api_attempts_history(self):
-        """Test GET /api/attempts and GET /api/attempts/<id>."""
+        """Test GET /api/attempts privacy isolation by student PIN and teacher audit access."""
+        # 1. Unauthenticated student with no PIN -> returns empty list []
         req = urllib.request.Request(f"{BASE_URL}/api/attempts")
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
             self.assertTrue(data["success"])
-            self.assertIsInstance(data["attempts"], list)
+            self.assertEqual(data["attempts"], [])
 
-            if len(data["attempts"]) > 0:
-                first_att_id = data["attempts"][0]["attempt_id"]
-                det_req = urllib.request.Request(f"{BASE_URL}/api/attempts/{first_att_id}")
-                with urllib.request.urlopen(det_req) as det_resp:
-                    self.assertEqual(det_resp.status, 200)
-                    det_data = json.loads(det_resp.read().decode("utf-8"))
-                    self.assertTrue(det_data["success"])
-                    self.assertIn("quiz", det_data["attempt"])
+        # Record test attempts for two distinct students
+        quizzes = database.list_quizzes()
+        qid = quizzes[0]["id"]
+
+        att_a_id = database.record_attempt(
+            quiz_id=qid, score=3, total_questions=5, time_taken_seconds=60,
+            answers={}, student_name="Student Alpha", student_roll="123456"
+        )
+        att_b_id = database.record_attempt(
+            quiz_id=qid, score=4, total_questions=5, time_taken_seconds=50,
+            answers={}, student_name="Student Beta", student_roll="654321"
+        )
+
+        # 2. Student Alpha queries attempts with X-Student-PIN: 123456
+        alpha_req = urllib.request.Request(
+            f"{BASE_URL}/api/attempts",
+            headers={"X-Student-PIN": "123456"}
+        )
+        with urllib.request.urlopen(alpha_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["success"])
+            rolls = [a["student_roll"] for a in data["attempts"]]
+            self.assertIn("123456", rolls)
+            self.assertNotIn("654321", rolls)
+
+        # 3. Student Beta cannot access Student Alpha's attempt detail (403 Forbidden)
+        forbidden_req = urllib.request.Request(
+            f"{BASE_URL}/api/attempts/{att_a_id}",
+            headers={"X-Student-PIN": "654321"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(forbidden_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 4. Student Alpha CAN access their own attempt detail (200 OK)
+        allowed_req = urllib.request.Request(
+            f"{BASE_URL}/api/attempts/{att_a_id}",
+            headers={"X-Student-PIN": "123456"}
+        )
+        with urllib.request.urlopen(allowed_req) as resp:
+            self.assertEqual(resp.status, 200)
+            det_data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(det_data["success"])
+            self.assertEqual(det_data["attempt"]["student_roll"], "123456")
+
+        # 5. Teacher Mode sees all attempts across all students
+        teacher_req = urllib.request.Request(
+            f"{BASE_URL}/api/attempts",
+            headers={"X-Teacher-PIN": "2026"}
+        )
+        with urllib.request.urlopen(teacher_req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            teacher_rolls = [a["student_roll"] for a in data["attempts"]]
+            self.assertIn("123456", teacher_rolls)
+            self.assertIn("654321", teacher_rolls)
     def test_07_missed_questions_calculation(self):
         """Test recording an attempt with incorrect answers and verifying missed questions identification."""
         quizzes = database.list_quizzes()

@@ -100,7 +100,6 @@ const App = {
     const btnStudentStart = document.getElementById('btn-student-entry-start');
     const studentPinInput = document.getElementById('student-input-pin');
     const studentNameInput = document.getElementById('student-input-name');
-    const studentRollInput = document.getElementById('student-input-roll');
 
     if (btnStudentCancel) btnStudentCancel.addEventListener('click', () => this.closeStudentEntryModal());
     if (btnStudentClose) btnStudentClose.addEventListener('click', () => this.closeStudentEntryModal());
@@ -115,14 +114,6 @@ const App = {
     }
     if (studentNameInput) {
       studentNameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (studentRollInput) studentRollInput.focus();
-        }
-      });
-    }
-    if (studentRollInput) {
-      studentRollInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           this.startExamWithCandidateInfo();
@@ -270,11 +261,9 @@ const App = {
 
     const pinInput = document.getElementById('student-input-pin');
     const nameInput = document.getElementById('student-input-name');
-    const rollInput = document.getElementById('student-input-roll');
 
     if (pinInput) pinInput.value = this.getStudentPin();
     if (nameInput) nameInput.value = this.getStudentName();
-    if (rollInput) rollInput.value = this.getStudentRoll();
 
     modal.classList.add('active');
     setTimeout(() => {
@@ -303,11 +292,9 @@ const App = {
   startExamWithCandidateInfo() {
     const pinInput = document.getElementById('student-input-pin');
     const nameInput = document.getElementById('student-input-name');
-    const rollInput = document.getElementById('student-input-roll');
 
     const pin = (pinInput ? pinInput.value : '').trim();
     const name = (nameInput ? nameInput.value : '').trim();
-    const roll = (rollInput ? rollInput.value : '').trim();
 
     if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
       this.showToast('Please enter a valid 6-digit PIN (e.g. 123456)', 'warning');
@@ -323,11 +310,15 @@ const App = {
 
     localStorage.setItem('quiz_student_pin', pin);
     localStorage.setItem('quiz_student_name', name);
-    localStorage.setItem('quiz_student_roll', roll || pin);
+    localStorage.setItem('quiz_student_roll', pin);
     this.updateStudentNavDisplay();
     this.closeStudentEntryModal();
     this.showToast(`Logged in as ${name} (PIN: ${pin})`, 'success');
     this.updateWeakSpotBanner();
+
+    if (this.currentView === 'history') {
+      this.showHistory();
+    }
 
     if (this.pendingQuizIdForExam) {
       const qid = this.pendingQuizIdForExam;
@@ -335,7 +326,7 @@ const App = {
       if (qid === 'weak_spot_custom') {
         this.startWeakSpotRevisionTest();
       } else {
-        this.startQuiz(qid, 'exam', { name, roll: roll || pin });
+        this.startQuiz(qid, 'exam', { name, roll: pin });
       }
     }
   },
@@ -739,6 +730,11 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
   },
 
   async getWeakSpotPool() {
+    const studentPin = this.getStudentPin();
+    if (!this.isTeacherMode && !studentPin) {
+      return [];
+    }
+
     // Collect all missed and unattempted questions from past completed tests
     const pool = new Map(); // question_id -> question object
 
@@ -790,7 +786,8 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
 
     // Exclude any questions that the student has since mastered (answered correctly in revision)
     try {
-      const masteredIds = new Set(JSON.parse(localStorage.getItem('quiz_mastered_question_ids') || '[]'));
+      const storageKey = studentPin ? `quiz_mastered_ids_${studentPin}` : 'quiz_mastered_question_ids';
+      const masteredIds = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
       for (const qid of masteredIds) {
         pool.delete(qid);
         pool.delete(Number(qid));
@@ -1034,6 +1031,23 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
     const container = document.getElementById('history-list');
     container.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading records...</div>';
 
+    // If student mode and not logged in with PIN, prompt to log in
+    if (!this.isTeacherMode && !this.getStudentPin()) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
+          <div style="font-size: 2.25rem; margin-bottom: 0.75rem;">🔒</div>
+          <p style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">Student Authentication Required</p>
+          <p style="font-size: 0.875rem; color: var(--text-secondary); max-width: 440px; margin: 0 auto 1.5rem; line-height: 1.5;">
+            To ensure complete privacy, your assessment history and revision questions are private to you. Please log in with your 6-digit PIN and name to view your records.
+          </p>
+          <button class="btn btn-primary" onclick="App.openStudentLoginModal()">Log In with 6-Digit PIN</button>
+        </div>
+      `;
+      const btnClearHistory = document.getElementById('btn-clear-history');
+      if (btnClearHistory) btnClearHistory.style.display = 'none';
+      return;
+    }
+
     try {
       this.allAttempts = await API.getAllAttempts();
       this.refreshHistoryBadge();
@@ -1044,10 +1058,13 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       }
 
       if (this.allAttempts.length === 0) {
+        const studentName = this.getStudentName();
+        const pin = this.getStudentPin();
+        const greeting = studentName ? `for ${studentName}` : (pin ? `for Student #${pin}` : '');
         container.innerHTML = `
           <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
-            <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 0.5rem;">No test attempts recorded yet</p>
-            <p style="font-size: 0.85rem; margin-bottom: 1.25rem;">Complete an assessment in Exam mode to view your full performance history.</p>
+            <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 0.5rem;">No test attempts recorded yet ${greeting}</p>
+            <p style="font-size: 0.85rem; margin-bottom: 1.25rem;">Complete an assessment in Exam mode to view your personalized performance history.</p>
             <button class="btn btn-primary" onclick="App.showDashboard()">Browse Assignments</button>
           </div>
         `;
@@ -1574,7 +1591,9 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
 
     // Automatically remove any question answered correctly in this test from the weak-spot pool
     try {
-      const masteredIds = JSON.parse(localStorage.getItem('quiz_mastered_question_ids') || '[]');
+      const studentPin = this.getStudentPin();
+      const storageKey = studentPin ? `quiz_mastered_ids_${studentPin}` : 'quiz_mastered_question_ids';
+      const masteredIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
       let masteredSet = new Set(masteredIds);
       (data.quiz.questions || []).forEach(q => {
         const userVal = data.userAnswers[q.id] !== undefined ? data.userAnswers[q.id] : data.userAnswers[String(q.id)];
@@ -1601,7 +1620,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           masteredSet.delete(q.id);
         }
       });
-      localStorage.setItem('quiz_mastered_question_ids', JSON.stringify(Array.from(masteredSet)));
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(masteredSet)));
     } catch (e) {}
 
     // Configure Drill Missed button

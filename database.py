@@ -509,11 +509,19 @@ def get_quiz_attempts(quiz_id: int) -> List[Dict[str, Any]]:
     return attempts
 
 
-def list_all_attempts() -> List[Dict[str, Any]]:
-    """List all past quiz attempts across all quizzes with metadata and JEE marks."""
+def list_all_attempts(student_pin: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List all past quiz attempts across all quizzes with metadata and JEE marks.
+    If student_pin is provided, only return attempts belonging to that student PIN.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    query = """
+    params = []
+    where_clause = ""
+    if student_pin:
+        where_clause = "WHERE a.student_roll = ?"
+        params.append(str(student_pin).strip())
+
+    query = f"""
     SELECT 
         a.id as attempt_id,
         a.quiz_id,
@@ -536,9 +544,10 @@ def list_all_attempts() -> List[Dict[str, Any]]:
         ROUND(a.score * 100.0 / NULLIF(a.total_questions, 0), 1) as score_percent
     FROM attempts a
     JOIN quizzes q ON a.quiz_id = q.id
+    {where_clause}
     ORDER BY a.completed_at DESC, a.id DESC;
     """
-    rows = cursor.execute(query).fetchall()
+    rows = cursor.execute(query, params).fetchall()
     attempts = [dict(row) for row in rows]
     conn.close()
     return attempts

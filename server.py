@@ -205,7 +205,23 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
         if len(parts) == 2 and parts[1] == "attempts":
             # GET /api/attempts
-            attempts = database.list_all_attempts()
+            # If teacher is authorized, return all submissions.
+            # If student, only return attempts matching their student PIN!
+            if is_teacher_authorized(self.headers):
+                attempts = database.list_all_attempts()
+            else:
+                student_pin = self.headers.get("X-Student-PIN") or self.headers.get("x-student-pin")
+                if not student_pin:
+                    # check parsed query param
+                    parsed_query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    student_pin = (parsed_query.get("student_pin") or [""])[0]
+
+                if not student_pin:
+                    # Student not logged in: return empty attempts to protect privacy
+                    return self.send_json({"success": True, "attempts": []})
+
+                attempts = database.list_all_attempts(student_pin=student_pin)
+
             return self.send_json({"success": True, "attempts": attempts})
 
         if len(parts) == 3 and parts[1] == "attempts":
@@ -218,6 +234,16 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             detail = database.get_attempt_detail(attempt_id)
             if not detail:
                 return self.send_error_json("Attempt record not found", 404)
+
+            # Privacy protection: if not teacher, ensure attempt belongs to this student PIN
+            if not is_teacher_authorized(self.headers):
+                student_pin = self.headers.get("X-Student-PIN") or self.headers.get("x-student-pin")
+                if not student_pin:
+                    parsed_query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    student_pin = (parsed_query.get("student_pin") or [""])[0]
+                if not student_pin or str(detail.get("student_roll", "")).strip() != str(student_pin).strip():
+                    return self.send_error_json("Access denied: Attempt record belongs to another student", 403)
+
             return self.send_json({"success": True, "attempt": detail})
 
         if len(parts) == 2 and parts[1] == "stats":
