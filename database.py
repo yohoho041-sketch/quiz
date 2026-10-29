@@ -157,9 +157,21 @@ class TursoConnection:
                 "Content-Type": "application/json"
             }
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            body = resp.read().decode("utf-8")
-            res = json.loads(body)
+        res = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    body = resp.read().decode("utf-8")
+                    res = json.loads(body)
+                    break
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                if attempt == 0:
+                    time.sleep(0.25)
+                    continue
+                raise sqlite3.OperationalError(f"Turso network error: {e}") from e
+
+        if not res:
+            raise sqlite3.OperationalError("Turso returned empty response")
 
         first = res.get("results", [{}])[0]
         if first.get("type") == "error":
@@ -457,15 +469,19 @@ def create_quiz(data: Dict[str, Any]) -> int:
         q_id = cursor.lastrowid
 
         options = q.get("options", [])
-        for opt_idx, opt in enumerate(options):
-            cursor.execute(
-                "INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES (?, ?, ?, ?)",
-                (
+        if options:
+            placeholders = ", ".join(["(?, ?, ?, ?)"] * len(options))
+            params = []
+            for opt_idx, opt in enumerate(options):
+                params.extend([
                     q_id,
                     opt.get("option_text", ""),
                     1 if opt.get("is_correct") else 0,
                     opt_idx
-                )
+                ])
+            cursor.execute(
+                f"INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES {placeholders}",
+                params
             )
 
     conn.commit()
@@ -532,15 +548,19 @@ def update_quiz(quiz_id: int, data: Dict[str, Any]) -> bool:
         q_id = cursor.lastrowid
 
         options = q.get("options", [])
-        for opt_idx, opt in enumerate(options):
-            cursor.execute(
-                "INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES (?, ?, ?, ?)",
-                (
+        if options:
+            placeholders = ", ".join(["(?, ?, ?, ?)"] * len(options))
+            params = []
+            for opt_idx, opt in enumerate(options):
+                params.extend([
                     q_id,
                     opt.get("option_text", ""),
                     1 if opt.get("is_correct") else 0,
                     opt_idx
-                )
+                ])
+            cursor.execute(
+                f"INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES {placeholders}",
+                params
             )
 
     conn.commit()

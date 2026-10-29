@@ -271,12 +271,18 @@ const QuizPlayer = {
     if (q.image_url && q.image_url.trim()) {
       imgContainer.style.display = 'block';
       imgContainer.innerHTML = `
-        <img src="${q.image_url}" alt="Question Diagram" />
+        <img src="${q.image_url}" alt="Question Diagram" loading="lazy"
+             onerror="this.onerror=null; this.style.display='none'; const b=this.parentElement.querySelector('.image-zoom-badge'); if(b) b.style.display='none'; const fb=this.parentElement.querySelector('.img-error-fallback'); if(fb) fb.style.display='flex';" />
         <div class="image-zoom-badge">
           <span style="display:flex;align-items:center;gap:4px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Click to enlarge
           </span>
+        </div>
+        <div class="img-error-fallback" style="display:none; flex-direction:column; align-items:center; justify-content:center; padding:1.25rem; gap:0.5rem; color:var(--text-secondary); text-align:center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style="font-size:0.875rem;">Diagram failed to load</span>
+          <button type="button" class="btn btn-outline btn-xs" style="margin-top:4px;" onclick="event.stopPropagation(); const p=this.closest('.question-image-box'); const img=p.querySelector('img'); if(img){ img.src='${q.image_url}?t='+Date.now(); img.style.display='block'; } const b=p.querySelector('.image-zoom-badge'); if(b) b.style.display='block'; this.parentElement.style.display='none';">↻ Retry Diagram</button>
         </div>
       `;
       imgContainer.onclick = () => App.openLightbox(q.image_url);

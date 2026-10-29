@@ -187,10 +187,14 @@ const API = {
 
     const promise = (async () => {
       try {
+        const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
+          ? AbortSignal.timeout(12000) 
+          : undefined;
         const res = await fetch(`/api/quizzes/${quizId}/attempts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(attemptData)
+          body: JSON.stringify(attemptData),
+          signal
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
