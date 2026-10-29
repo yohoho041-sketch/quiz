@@ -271,6 +271,15 @@ def init_db():
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS uploaded_images (
+        filename TEXT PRIMARY KEY,
+        mime_type TEXT DEFAULT 'image/png',
+        data_base64 TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
     # High-Performance Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_quiz_id ON questions(quiz_id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_options_question_id ON options(question_id);")
@@ -550,6 +559,38 @@ def delete_quiz(quiz_id: int) -> bool:
     return deleted
 
 
+def save_uploaded_image(filename: str, mime_type: str, data_bytes: bytes):
+    """Persist an uploaded image into the database (Turso or SQLite) for serverless permanence."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    b64_str = base64.b64encode(data_bytes).decode("utf-8")
+    cursor.execute(
+        "INSERT OR REPLACE INTO uploaded_images (filename, mime_type, data_base64) VALUES (?, ?, ?)",
+        (filename, mime_type, b64_str)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_uploaded_image(filename: str) -> Optional[tuple]:
+    """Retrieve an uploaded image from the database if not present on local ephemeral disk."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    row = cursor.execute(
+        "SELECT mime_type, data_base64 FROM uploaded_images WHERE filename = ?",
+        (filename,)
+    ).fetchone()
+    conn.close()
+    if not row or not row["data_base64"]:
+        return None
+    mime = row["mime_type"] or "image/png"
+    try:
+        data = base64.b64decode(row["data_base64"])
+        return mime, data
+    except Exception:
+        return None
+
+
 def record_attempt(
     quiz_id: int,
     score: int = 0,
@@ -570,20 +611,37 @@ def record_attempt(
     """
     Record a user quiz attempt with full JEE Marking Scheme computation and anti-cheating audit.
     Rule: MCQ incorrect incurs negative penalty (-1); Integer incorrect incurs 0 (no negative penalty).
+    Optimized for high concurrency with minimal round-trip queries.
     """
     payload_dict = answers_dict if answers_dict is not None else (answers or {})
     v_log_str = json.dumps(violations_log) if isinstance(violations_log, (list, dict)) else str(violations_log or "[]")
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    quiz_row = cursor.execute("SELECT * FROM quizzes WHERE id = ?", (quiz_id,)).fetchone()
-    pos_marks = float(quiz_row["positive_marks"]) if quiz_row and "positive_marks" in quiz_row.keys() else 4.0
-    neg_marks = float(quiz_row["negative_marks"]) if quiz_row and "negative_marks" in quiz_row.keys() else 1.0
+    quiz_row = cursor.execute("SELECT positive_marks, negative_marks FROM quizzes WHERE id = ?", (quiz_id,)).fetchone()
+    if not quiz_row:
+        conn.close()
+        raise ValueError(f"Quiz {quiz_id} not found")
+
+    pos_marks = float(quiz_row["positive_marks"]) if "positive_marks" in quiz_row.keys() else 4.0
+    neg_marks = float(quiz_row["negative_marks"]) if "negative_marks" in quiz_row.keys() else 1.0
 
     questions_rows = cursor.execute(
         "SELECT id, question_type, correct_numerical_value, numerical_tolerance FROM questions WHERE quiz_id = ?",
         (quiz_id,)
     ).fetchall()
+
+    # Fetch all correct options in a SINGLE batched IN (...) query instead of sequential queries in a loop
+    q_ids = [q_row["id"] for q_row in questions_rows]
+    correct_options_map = {}
+    if q_ids:
+        placeholders = ",".join("?" * len(q_ids))
+        opts = cursor.execute(
+            f"SELECT id, question_id FROM options WHERE question_id IN ({placeholders}) AND is_correct = 1",
+            q_ids
+        ).fetchall()
+        for opt in opts:
+            correct_options_map[opt["question_id"]] = opt["id"]
 
     calc_correct = 0
     calc_pos_score = 0.0
@@ -611,15 +669,11 @@ def record_attempt(
                     # STRICT JEE RULE: Zero negative penalty for numerical / integer type!
                     calc_neg_penalty += 0.0
             else:
-                # Standard MCQ question
-                correct_opt = cursor.execute(
-                    "SELECT id FROM options WHERE question_id = ? AND is_correct = 1",
-                    (q_row["id"],)
-                ).fetchone()
-
+                # Standard MCQ question from pre-fetched map
+                correct_opt_id = correct_options_map.get(q_row["id"])
                 try:
                     chosen_opt_id = int(user_val)
-                    if correct_opt and chosen_opt_id == correct_opt["id"]:
+                    if correct_opt_id is not None and chosen_opt_id == correct_opt_id:
                         calc_correct += 1
                         calc_pos_score += pos_marks
                     else:

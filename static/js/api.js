@@ -192,12 +192,18 @@ const API = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(attemptData)
         });
-        if (!res.ok) throw new Error('Failed to save attempt');
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Server returned ${res.status}`);
+        }
         return await res.json();
+      } catch (err) {
+        if (this._inFlight) this._inFlight.delete(key);
+        throw err;
       } finally {
         setTimeout(() => {
           if (this._inFlight) this._inFlight.delete(key);
-        }, 3000);
+        }, 2000);
       }
     })();
 

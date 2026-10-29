@@ -455,6 +455,10 @@
               <span class="legend-text">Ans &amp; Marked for Review</span>
             </div>
           </div>
+
+          <button type="button" class="btn btn-success" id="btn-palette-submit-quiz" style="width: 100%; margin-top: 1.25rem; font-weight: 600; padding: 0.65rem 1rem;">
+            Submit Assessment
+          </button>
         </aside>
       </div>
     </section>
@@ -964,6 +968,29 @@ Explanation: UDP is connectionless and does not guarantee packet ordering."></te
       <button type="button" class="btn btn-primary" id="btn-reenter-fullscreen" style="width: 100%;">
         Re-enter Fullscreen &amp; Continue
       </button>
+    </div>
+  </div>
+
+  <!-- Submit Confirmation Modal -->
+  <div class="modal-overlay" id="submit-confirm-modal" style="z-index: 1002;">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Submit Assessment</h3>
+          <p class="modal-subtitle">Review your summary before submitting</p>
+        </div>
+        <button class="modal-close" id="submit-confirm-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem;">
+        <div id="submit-confirm-stats" style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
+        </div>
+        <div id="submit-confirm-warning" style="font-size:0.875rem; color:var(--accent-amber); display:none; padding:0.6rem; background:rgba(245,158,11,0.1); border-radius:6px; border:1px solid rgba(245,158,11,0.25);">
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:0.75rem;">
+        <button type="button" class="btn btn-secondary" id="btn-submit-confirm-cancel">Continue Exam</button>
+        <button type="button" class="btn btn-success" id="btn-submit-confirm-proceed">Submit Now</button>
+      </div>
     </div>
   </div>
 

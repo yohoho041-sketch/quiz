@@ -489,15 +489,65 @@ const QuizPlayer = {
   confirmSubmit() {
     if (this._isSubmitting) return;
     const total = this.quiz.questions.length;
-    const answeredCount = Object.keys(this.userAnswers).length;
+    let answeredCount = 0;
+    (this.quiz.questions || []).forEach(q => {
+      const uVal = this.userAnswers[q.id];
+      if (uVal !== undefined && uVal !== null && String(uVal).trim() !== '') {
+        answeredCount++;
+      }
+    });
     const unanswered = total - answeredCount;
+    const markedCount = this.flaggedQuestions ? this.flaggedQuestions.size : 0;
 
-    if (unanswered > 0) {
-      const confirmMsg = `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}.\nAre you sure you want to submit?`;
-      if (!confirm(confirmMsg)) {
-        return;
+    const modal = document.getElementById('submit-confirm-modal');
+    if (!modal) {
+      // Fallback to direct submit if modal is absent
+      this.submitQuiz();
+      return;
+    }
+
+    const statsEl = document.getElementById('submit-confirm-stats');
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div style="background:var(--bg-card); padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); text-align:center;">
+          <div style="font-size:1.4rem; font-weight:700; color:var(--text-primary); font-family:var(--font-mono);">${total}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-top:2px;">Total Questions</div>
+        </div>
+        <div style="background:rgba(16,185,129,0.08); padding:0.75rem; border-radius:8px; border:1px solid rgba(16,185,129,0.25); text-align:center;">
+          <div style="font-size:1.4rem; font-weight:700; color:var(--accent-emerald); font-family:var(--font-mono);">${answeredCount}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-top:2px;">Answered</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.08); padding:0.75rem; border-radius:8px; border:1px solid rgba(239,68,68,0.25); text-align:center;">
+          <div style="font-size:1.4rem; font-weight:700; color:${unanswered > 0 ? 'var(--accent-rose)' : 'var(--text-muted)'}; font-family:var(--font-mono);">${unanswered}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-top:2px;">Not Answered</div>
+        </div>
+        <div style="background:rgba(139,92,246,0.08); padding:0.75rem; border-radius:8px; border:1px solid rgba(139,92,246,0.25); text-align:center;">
+          <div style="font-size:1.4rem; font-weight:700; color:var(--accent-purple, #a78bfa); font-family:var(--font-mono);">${markedCount}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-top:2px;">Marked for Review</div>
+        </div>
+      `;
+    }
+
+    const warningEl = document.getElementById('submit-confirm-warning');
+    if (warningEl) {
+      if (unanswered > 0) {
+        warningEl.style.display = 'block';
+        warningEl.textContent = `⚠️ You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Unanswered questions receive 0 marks.`;
+      } else {
+        warningEl.style.display = 'none';
       }
     }
+
+    modal.classList.add('active');
+  },
+
+  hideSubmitConfirmModal() {
+    const modal = document.getElementById('submit-confirm-modal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  executeSubmitFromModal() {
+    this.hideSubmitConfirmModal();
     this.submitQuiz();
   },
 
@@ -717,18 +767,29 @@ const QuizPlayer = {
     this._isSubmitting = true;
 
     const btnSubmit = document.getElementById('btn-submit-quiz');
+    const btnPalette = document.getElementById('btn-palette-submit-quiz');
     const originalText = btnSubmit ? btnSubmit.innerHTML : '';
+    const originalPaletteText = btnPalette ? btnPalette.innerHTML : '';
+
+    const spinnerHtml = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 4px;">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+        <path d="M12 2a10 10 0 0 1 10 10" />
+      </svg>
+      <span>Submitting...</span>
+    `;
+
     if (btnSubmit) {
       btnSubmit.disabled = true;
       btnSubmit.style.opacity = '0.65';
       btnSubmit.style.pointerEvents = 'none';
-      btnSubmit.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 4px;">
-          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
-          <path d="M12 2a10 10 0 0 1 10 10" />
-        </svg>
-        <span>Submitting...</span>
-      `;
+      btnSubmit.innerHTML = spinnerHtml;
+    }
+    if (btnPalette) {
+      btnPalette.disabled = true;
+      btnPalette.style.opacity = '0.65';
+      btnPalette.style.pointerEvents = 'none';
+      btnPalette.innerHTML = spinnerHtml;
     }
 
     try {
@@ -793,7 +854,7 @@ const QuizPlayer = {
       try {
         const qid = parseInt(this.quiz.id, 10);
         if (!isNaN(qid)) {
-          await API.recordAttempt(qid, {
+          const attemptPayload = {
             score: score,
             total_questions: total,
             time_taken_seconds: this.timeTakenSeconds,
@@ -807,10 +868,19 @@ const QuizPlayer = {
             is_disqualified: this.isDisqualified,
             student_name: this.studentName || 'Anonymous Student',
             student_roll: this.studentRoll || ''
-          });
+          };
+
+          try {
+            await API.recordAttempt(qid, attemptPayload);
+          } catch (firstErr) {
+            console.warn('Initial attempt submission failed, retrying once...', firstErr);
+            await new Promise(r => setTimeout(r, 800));
+            await API.recordAttempt(qid, attemptPayload);
+          }
         }
       } catch (e) {
         console.error('Failed to save attempt record:', e);
+        App.showToast(`Submission notice: Recorded on device (${e.message || 'Server timeout'})`, 'warning');
       }
 
       App.showResults({
@@ -833,6 +903,12 @@ const QuizPlayer = {
         btnSubmit.style.opacity = '';
         btnSubmit.style.pointerEvents = '';
         btnSubmit.innerHTML = originalText;
+      }
+      if (btnPalette) {
+        btnPalette.disabled = false;
+        btnPalette.style.opacity = '';
+        btnPalette.style.pointerEvents = '';
+        btnPalette.innerHTML = originalPaletteText;
       }
     }
   },

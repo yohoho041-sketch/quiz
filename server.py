@@ -147,6 +147,29 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             return
 
         if not os.path.exists(file_path) or os.path.isdir(file_path):
+            if path.startswith("/uploads/"):
+                # Check database for image persistence across serverless instances
+                rel_path = path[len("/uploads/"):].lstrip("/")
+                img_data = database.get_uploaded_image(rel_path)
+                if img_data:
+                    mime_type, raw_bytes = img_data
+                    try:
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        with open(file_path, "wb") as f:
+                            f.write(raw_bytes)
+                    except Exception:
+                        pass
+                    self.send_response(200)
+                    self.send_header("Content-Type", mime_type)
+                    self.send_header("Content-Length", str(len(raw_bytes)))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(raw_bytes)
+                    return
+                else:
+                    self.send_error(404, "File Not Found")
+                    return
+
             # Fallback to index.html for client-side routing if not found
             index_path = os.path.join(STATIC_DIR, "index.html")
             if os.path.exists(index_path) and not path.startswith("/uploads/"):
@@ -359,10 +382,6 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 return self.send_error_json("Invalid quiz ID", 400)
 
-            quiz = database.get_quiz(quiz_id)
-            if not quiz:
-                return self.send_error_json("Quiz not found", 404)
-
             # Deduplication: prevent duplicate attempt records if student clicks Submit multiple times
             student_roll = str(payload.get("student_roll", "")).strip()
             student_name = str(payload.get("student_name", "Anonymous Student")).strip()
@@ -374,7 +393,7 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
                 return self.send_json(cached_resp, status=cached_status)
 
             score = int(payload.get("score", 0))
-            total_questions = int(payload.get("total_questions", len(quiz["questions"])))
+            total_questions = int(payload.get("total_questions", 0))
             time_taken = int(payload.get("time_taken_seconds", 0))
             pos_score = payload.get("positive_score")
             neg_pen = payload.get("negative_penalty")
@@ -385,18 +404,24 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             violations_log = payload.get("violations_log", [])
             is_disqualified = bool(payload.get("is_disqualified", False))
 
-            attempt_id = database.record_attempt(
-                quiz_id, score, total_questions, time_taken, answers,
-                positive_score=float(pos_score) if pos_score is not None else None,
-                negative_penalty=float(neg_pen) if neg_pen is not None else None,
-                net_marks=float(net_marks) if net_marks is not None else None,
-                max_marks=float(max_marks) if max_marks is not None else None,
-                violations_count=violations_count,
-                violations_log=violations_log,
-                is_disqualified=is_disqualified,
-                student_name=student_name,
-                student_roll=student_roll
-            )
+            try:
+                attempt_id = database.record_attempt(
+                    quiz_id, score, total_questions, time_taken, answers,
+                    positive_score=float(pos_score) if pos_score is not None else None,
+                    negative_penalty=float(neg_pen) if neg_pen is not None else None,
+                    net_marks=float(net_marks) if net_marks is not None else None,
+                    max_marks=float(max_marks) if max_marks is not None else None,
+                    violations_count=violations_count,
+                    violations_log=violations_log,
+                    is_disqualified=is_disqualified,
+                    student_name=student_name,
+                    student_roll=student_roll
+                )
+            except ValueError:
+                return self.send_error_json("Quiz not found", 404)
+            except Exception as e:
+                return self.send_error_json(f"Failed to record attempt: {e}", 500)
+
             resp_data = {"success": True, "attempt_id": attempt_id}
             record_idempotent_response(dedup_key, 201, resp_data)
             return self.send_json(resp_data, status=201)
@@ -503,8 +528,13 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
                     ext = ".png"
                 filename = f"img_{uuid.uuid4().hex[:12]}{ext}"
                 dest = os.path.join(UPLOADS_DIR, filename)
-                with open(dest, "wb") as f:
-                    f.write(file_bytes)
+                try:
+                    with open(dest, "wb") as f:
+                        f.write(file_bytes)
+                except Exception:
+                    pass
+                mime_type = mimetypes.guess_type(filename)[0] or "image/png"
+                database.save_uploaded_image(filename, mime_type, file_bytes)
                 return self.send_json({"success": True, "url": f"/uploads/{filename}"})
             except Exception as e:
                 return self.send_error_json(f"Base64 upload failed: {e}", 400)
@@ -556,8 +586,13 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
                         filename = f"img_{uuid.uuid4().hex[:12]}{ext}"
                         dest = os.path.join(UPLOADS_DIR, filename)
-                        with open(dest, "wb") as f:
-                            f.write(content)
+                        try:
+                            with open(dest, "wb") as f:
+                                f.write(content)
+                        except Exception:
+                            pass
+                        mime_type = mimetypes.guess_type(filename)[0] or "image/png"
+                        database.save_uploaded_image(filename, mime_type, content)
 
                         return self.send_json({"success": True, "url": f"/uploads/{filename}"})
 

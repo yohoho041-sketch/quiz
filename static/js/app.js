@@ -573,6 +573,34 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       QuizPlayer.confirmSubmit();
     });
 
+    const btnPaletteSubmit = document.getElementById('btn-palette-submit-quiz');
+    if (btnPaletteSubmit) {
+      btnPaletteSubmit.addEventListener('click', () => {
+        QuizPlayer.confirmSubmit();
+      });
+    }
+
+    const btnSubmitModalClose = document.getElementById('submit-confirm-close');
+    if (btnSubmitModalClose) {
+      btnSubmitModalClose.addEventListener('click', () => {
+        QuizPlayer.hideSubmitConfirmModal();
+      });
+    }
+
+    const btnSubmitModalCancel = document.getElementById('btn-submit-confirm-cancel');
+    if (btnSubmitModalCancel) {
+      btnSubmitModalCancel.addEventListener('click', () => {
+        QuizPlayer.hideSubmitConfirmModal();
+      });
+    }
+
+    const btnSubmitModalProceed = document.getElementById('btn-submit-confirm-proceed');
+    if (btnSubmitModalProceed) {
+      btnSubmitModalProceed.addEventListener('click', () => {
+        QuizPlayer.executeSubmitFromModal();
+      });
+    }
+
     // Exam Font & Diagram Zoom Controls
     const btnZoomIn = document.getElementById('btn-zoom-in');
     if (btnZoomIn) btnZoomIn.addEventListener('click', () => QuizPlayer.zoomIn());

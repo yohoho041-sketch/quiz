@@ -213,14 +213,28 @@ class TestQuizApp(unittest.TestCase):
                 self.assertEqual(img_resp.status, 200)
                 self.assertEqual(img_resp.headers.get("Content-Type"), "image/png")
 
-        # Clean up test uploaded image
+        # Test database persistence: delete from disk cache and ensure GET still succeeds via DB fallback
         uploaded_fname = data["url"].split("/")[-1]
         uploaded_fpath = os.path.join(seed_data.UPLOADS_DIR, uploaded_fname)
+        if os.path.exists(uploaded_fpath):
+            os.remove(uploaded_fpath)
+        self.assertFalse(os.path.exists(uploaded_fpath))
+
+        with urllib.request.urlopen(img_req) as img_resp2:
+            self.assertEqual(img_resp2.status, 200)
+            self.assertEqual(img_resp2.headers.get("Content-Type"), "image/png")
+
+        # Clean up test uploaded image from disk and DB
         if os.path.exists(uploaded_fpath):
             try:
                 os.remove(uploaded_fpath)
             except OSError:
                 pass
+        conn = database.get_db_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM uploaded_images WHERE filename = ?", (uploaded_fname,))
+        conn.commit()
+        conn.close()
 
     def test_05_static_file_serving(self):
         """Test GET / serves index.html and static assets."""
