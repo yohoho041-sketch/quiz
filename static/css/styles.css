@@ -1016,6 +1016,8 @@ body.fullscreen-test-mode .container {
   color: var(--text-primary);
   margin-bottom: 1.75rem;
   transition: font-size 0.15s ease;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Question Diagram Box (Large & High Resolution) */
@@ -1150,6 +1152,8 @@ body.fullscreen-test-mode .container {
   flex: 1;
   line-height: 1.48;
   transition: font-size 0.15s ease;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Practice Mode Highlights */
@@ -1311,6 +1315,8 @@ body.fullscreen-test-mode .container {
   font-size: 0.925rem;
   color: var(--text-primary);
   line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Player Navigation Controls */
@@ -1631,6 +1637,8 @@ body.fullscreen-test-mode .container {
   line-height: 1.48;
   letter-spacing: -0.015em;
   margin-bottom: 1.15rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .review-image-box {
@@ -1668,6 +1676,12 @@ body.fullscreen-test-mode .container {
   justify-content: space-between;
   border: 1px solid transparent;
   transition: all 0.15s ease;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.review-opt span {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .review-opt.opt-correct {
   background-color: var(--accent-emerald-subtle);
@@ -2840,6 +2854,12 @@ sub {
   border-radius: var(--radius-sm);
   font-size: 0.95rem;
   color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.math-preview-content {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .math-preview-tag {
   font-size: 0.7rem;
