@@ -257,6 +257,7 @@ def init_db():
         option_text TEXT NOT NULL,
         is_correct INTEGER DEFAULT 0, -- 1 if true, 0 if false
         order_index INTEGER DEFAULT 0,
+        image_url TEXT DEFAULT '',
         FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
     );
     """)
@@ -316,6 +317,11 @@ def init_db():
             cursor.execute("ALTER TABLE questions ADD COLUMN correct_numerical_value REAL DEFAULT NULL")
         if "numerical_tolerance" not in qu_cols:
             cursor.execute("ALTER TABLE questions ADD COLUMN numerical_tolerance REAL DEFAULT 0.0")
+
+        # options table
+        opt_cols = [c[1] for c in cursor.execute("PRAGMA table_info(options)").fetchall()]
+        if "image_url" not in opt_cols:
+            cursor.execute("ALTER TABLE options ADD COLUMN image_url TEXT DEFAULT ''")
 
         # attempts table
         att_cols = [c[1] for c in cursor.execute("PRAGMA table_info(attempts)").fetchall()]
@@ -397,7 +403,7 @@ def get_quiz(quiz_id: int) -> Optional[Dict[str, Any]]:
         q_ids = [row["id"] for row in questions_rows]
         placeholders = ",".join("?" * len(q_ids))
         options_rows = cursor.execute(
-            f"SELECT id, question_id, option_text, is_correct, order_index FROM options WHERE question_id IN ({placeholders}) ORDER BY order_index ASC, id ASC",
+            f"SELECT id, question_id, option_text, is_correct, order_index, image_url FROM options WHERE question_id IN ({placeholders}) ORDER BY order_index ASC, id ASC",
             q_ids
         ).fetchall()
 
@@ -470,17 +476,18 @@ def create_quiz(data: Dict[str, Any]) -> int:
 
         options = q.get("options", [])
         if options:
-            placeholders = ", ".join(["(?, ?, ?, ?)"] * len(options))
+            placeholders = ", ".join(["(?, ?, ?, ?, ?)"] * len(options))
             params = []
             for opt_idx, opt in enumerate(options):
                 params.extend([
                     q_id,
                     opt.get("option_text", ""),
                     1 if opt.get("is_correct") else 0,
-                    opt_idx
+                    opt_idx,
+                    opt.get("image_url", "") or ""
                 ])
             cursor.execute(
-                f"INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES {placeholders}",
+                f"INSERT INTO options (question_id, option_text, is_correct, order_index, image_url) VALUES {placeholders}",
                 params
             )
 
@@ -549,17 +556,18 @@ def update_quiz(quiz_id: int, data: Dict[str, Any]) -> bool:
 
         options = q.get("options", [])
         if options:
-            placeholders = ", ".join(["(?, ?, ?, ?)"] * len(options))
+            placeholders = ", ".join(["(?, ?, ?, ?, ?)"] * len(options))
             params = []
             for opt_idx, opt in enumerate(options):
                 params.extend([
                     q_id,
                     opt.get("option_text", ""),
                     1 if opt.get("is_correct") else 0,
-                    opt_idx
+                    opt_idx,
+                    opt.get("image_url", "") or ""
                 ])
             cursor.execute(
-                f"INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES {placeholders}",
+                f"INSERT INTO options (question_id, option_text, is_correct, order_index, image_url) VALUES {placeholders}",
                 params
             )
 

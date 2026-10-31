@@ -736,6 +736,86 @@ class TestQuizApp(unittest.TestCase):
         # Cleanup test quiz
         database.delete_quiz(quiz_id_1)
 
+    def test_13_image_options_support(self):
+        """Test creating, fetching, and taking quizzes with diagram/image options."""
+        quiz_data = {
+            "title": "Diagram Options Test Quiz",
+            "description": "Testing options with attached images",
+            "category": "Physics",
+            "time_limit_minutes": 10,
+            "positive_marks": 4.0,
+            "negative_marks": 1.0,
+            "questions": [
+                {
+                    "question_text": "Which graph correctly represents Ohm's law?",
+                    "image_url": "/uploads/img_test_q.png",
+                    "question_type": "mcq",
+                    "explanation": "Linear V-I characteristic",
+                    "options": [
+                        {"option_text": "Graph A (Linear)", "is_correct": True, "image_url": "/uploads/img_opt_a.png"},
+                        {"option_text": "Graph B (Parabolic)", "is_correct": False, "image_url": "/uploads/img_opt_b.png"},
+                        {"option_text": "", "is_correct": False, "image_url": "/uploads/img_opt_c.png"},
+                        {"option_text": "None of the above", "is_correct": False, "image_url": ""}
+                    ]
+                }
+            ]
+        }
+
+        # 1. Create quiz via API with teacher pin
+        req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=json.dumps(quiz_data).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            data = json.loads(resp.read().decode("utf-8"))
+            quiz_id = data["quiz"]["id"]
+
+        # 2. Fetch quiz and verify image_url is returned for options
+        req_get = urllib.request.Request(f"{BASE_URL}/api/quizzes/{quiz_id}")
+        with urllib.request.urlopen(req_get) as resp_get:
+            self.assertEqual(resp_get.status, 200)
+            quiz = json.loads(resp_get.read().decode("utf-8"))["quiz"]
+            q = quiz["questions"][0]
+            self.assertEqual(len(q["options"]), 4)
+            self.assertEqual(q["options"][0]["image_url"], "/uploads/img_opt_a.png")
+            self.assertEqual(q["options"][1]["image_url"], "/uploads/img_opt_b.png")
+            self.assertEqual(q["options"][2]["image_url"], "/uploads/img_opt_c.png")
+            self.assertEqual(q["options"][3]["image_url"], "")
+            correct_opt_id = q["options"][0]["id"]
+
+        # 3. Submit attempt choosing image option A
+        attempt_payload = {
+            "score": 1,
+            "total_questions": 1,
+            "time_taken_seconds": 15,
+            "student_name": "Image Option Student",
+            "student_roll": "OPT-IMG-001",
+            "answers": {str(q["id"]): correct_opt_id}
+        }
+        att_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/attempts",
+            data=json.dumps(attempt_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(att_req) as att_resp:
+            self.assertEqual(att_resp.status, 201)
+            att_data = json.loads(att_resp.read().decode("utf-8"))
+            attempt_id = att_data["attempt_id"]
+            self.assertIsNotNone(attempt_id)
+
+        # 4. Fetch attempt details
+        att_detail = database.get_attempt_detail(attempt_id)
+        self.assertIsNotNone(att_detail)
+        self.assertEqual(att_detail["score"], 1)
+        self.assertEqual(att_detail["net_marks"], 4.0)
+
+        # Cleanup
+        database.delete_quiz(quiz_id)
+
 
 if __name__ == "__main__":
     unittest.main()

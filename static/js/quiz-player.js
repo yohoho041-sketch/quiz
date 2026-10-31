@@ -400,9 +400,35 @@ const QuizPlayer = {
         }
 
         const keyLabel = alphabet[optIdx] || `${optIdx + 1}`;
+        const hasImg = Boolean(opt.image_url && opt.image_url.trim());
+        const hasText = Boolean(opt.option_text && opt.option_text.trim());
+
+        let optContentHtml = '';
+        if (hasImg) {
+          optContentHtml += `
+            <div class="option-image-box">
+              <img src="${opt.image_url}" alt="Option ${keyLabel} Diagram" loading="lazy"
+                   onerror="this.onerror=null; this.style.display='none'; const fb=this.parentElement.querySelector('.img-error-fallback'); if(fb) fb.style.display='flex';" />
+              <button type="button" class="opt-img-zoom-btn" title="Click to enlarge option diagram" onclick="event.stopPropagation(); App.openLightbox('${opt.image_url}');">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Enlarge</span>
+              </button>
+              <div class="img-error-fallback" style="display:none; padding:0.5rem; font-size:0.75rem; color:var(--text-muted); text-align:center;">
+                Diagram failed to load.
+                <button type="button" class="btn btn-outline btn-xs" style="margin-left:4px;" onclick="event.stopPropagation(); const img=this.parentElement.parentElement.querySelector('img'); if(img){img.src='${opt.image_url}?t='+Date.now(); img.style.display='block';} this.parentElement.style.display='none';">↻</button>
+              </div>
+            </div>
+          `;
+        }
+        if (hasText || !hasImg) {
+          optContentHtml += `<div class="option-text">${App.formatMathText(opt.option_text || '')}</div>`;
+        }
+
         card.innerHTML = `
           <div class="option-key"><span class="kbd-cap">${keyLabel}</span></div>
-          <div class="option-text">${App.formatMathText(opt.option_text)}</div>
+          <div class="option-body" style="flex:1; display:flex; flex-direction:column; gap:0.45rem;">
+            ${optContentHtml}
+          </div>
         `;
 
         card.addEventListener('click', () => {

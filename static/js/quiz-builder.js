@@ -215,6 +215,33 @@ const QuizBuilder = {
     }
   },
 
+  async handleOptionImageUpload(qIdx, optIdx, file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      App.showToast('Please select or paste a valid image file', 'error');
+      return;
+    }
+
+    try {
+      App.showToast('Uploading option image...', 'info');
+      const url = await API.uploadImage(file);
+      if (this.questions[qIdx] && this.questions[qIdx].options[optIdx]) {
+        this.questions[qIdx].options[optIdx].image_url = url;
+        this.renderQuestions();
+        App.showToast(`Option image attached successfully!`, 'success');
+      }
+    } catch (err) {
+      App.showToast(`Option image upload failed: ${err.message}`, 'error');
+    }
+  },
+
+  removeOptionImage(qIdx, optIdx) {
+    if (this.questions[qIdx] && this.questions[qIdx].options[optIdx]) {
+      this.questions[qIdx].options[optIdx].image_url = '';
+      this.renderQuestions();
+    }
+  },
+
   removeImage(qIdx) {
     this.questions[qIdx].image_url = '';
     this.renderQuestions();
@@ -299,6 +326,7 @@ const QuizBuilder = {
       q.options.forEach((opt, optIdx) => {
         const isCorrect = Boolean(opt.is_correct);
         const hasText = Boolean(opt.option_text && opt.option_text.trim());
+        const hasImg = Boolean(opt.image_url && opt.image_url.trim());
         const renderedMath = hasText ? App.formatMathText(opt.option_text) : '';
         optionsHtml += `
           <div class="builder-opt-item">
@@ -310,13 +338,36 @@ const QuizBuilder = {
                 ${isCorrect ? '<span class="correct-check-badge">✓ Correct</span>' : ''}
               </button>
               <input type="text" class="form-control opt-text-input" 
-                     placeholder="Option ${letters[optIdx]}" 
-                     value="${this.escapeHtml(opt.option_text)}"
+                     placeholder="Option ${letters[optIdx]} (text or formula, optional if image uploaded)" 
+                     value="${this.escapeHtml(opt.option_text || '')}"
                      data-q="${qIdx}" data-opt="${optIdx}">
+              
+              <input type="file" accept="image/*" class="file-input-hidden opt-file-input" id="opt_file_input_${qIdx}_${optIdx}" style="display:none;" data-q="${qIdx}" data-opt="${optIdx}">
+              <button type="button" class="btn btn-outline btn-sm btn-opt-attach-img ${hasImg ? 'has-img-attached' : ''}" 
+                      title="${hasImg ? 'Option has image attached (click to change)' : 'Attach image/diagram to this option'}"
+                      data-q="${qIdx}" data-opt="${optIdx}">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span>${hasImg ? 'Img ✓' : 'Img'}</span>
+              </button>
+
               <button type="button" class="btn btn-outline btn-sm btn-del-opt" 
                       title="Remove this option"
                       data-q="${qIdx}" data-opt="${optIdx}">✕</button>
             </div>
+
+            ${hasImg ? `
+              <div class="opt-image-preview-wrapper" data-q="${qIdx}" data-opt="${optIdx}">
+                <div class="opt-img-thumb-container" onclick="App.openLightbox('${opt.image_url}')" title="Click to view full diagram">
+                  <img src="${opt.image_url}" class="opt-img-thumb" alt="Option ${letters[optIdx]} Diagram" />
+                </div>
+                <button type="button" class="btn-remove-opt-img" title="Remove image from option ${letters[optIdx]}" data-q="${qIdx}" data-opt="${optIdx}">✕</button>
+              </div>
+            ` : ''}
+
             <div class="option-preview-box" id="opt_preview_${qIdx}_${optIdx}" style="${hasText ? 'display:flex;' : 'display:none;'}">
               <span class="option-preview-tag">Preview ${letters[optIdx]}:</span>
               <div class="option-preview-content">${renderedMath}</div>
@@ -609,8 +660,38 @@ const QuizBuilder = {
       });
     });
 
-    // File input changes
-    document.querySelectorAll('.file-input-hidden').forEach(el => {
+    // Option Attach Image button
+    document.querySelectorAll('.btn-opt-attach-img').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const qIndex = parseInt(e.currentTarget.dataset.q);
+        const optIdx = parseInt(e.currentTarget.dataset.opt);
+        const fileInput = document.getElementById(`opt_file_input_${qIndex}_${optIdx}`);
+        if (fileInput) fileInput.click();
+      });
+    });
+
+    // Option file input changes
+    document.querySelectorAll('.opt-file-input').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const qIndex = parseInt(e.target.dataset.q);
+        const optIdx = parseInt(e.target.dataset.opt);
+        if (e.target.files && e.target.files[0]) {
+          this.handleOptionImageUpload(qIndex, optIdx, e.target.files[0]);
+        }
+      });
+    });
+
+    // Remove Option Image button
+    document.querySelectorAll('.btn-remove-opt-img').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const qIndex = parseInt(e.currentTarget.dataset.q);
+        const optIdx = parseInt(e.currentTarget.dataset.opt);
+        this.removeOptionImage(qIndex, optIdx);
+      });
+    });
+
+    // Main Question File input changes
+    document.querySelectorAll('.file-input-hidden:not(.opt-file-input)').forEach(el => {
       el.addEventListener('change', (e) => {
         const qIndex = parseInt(e.target.dataset.q);
         if (e.target.files && e.target.files[0]) {
@@ -833,10 +914,10 @@ const QuizBuilder = {
           App.showToast(`Question ${i + 1} must have at least 2 options`, 'error');
           return;
         }
-        const hasEmptyOpt = q.options.some(o => !o.option_text.trim());
+        const hasEmptyOpt = q.options.some(o => !((o.option_text && o.option_text.trim()) || (o.image_url && o.image_url.trim())));
         if (hasEmptyOpt) {
           this.goToQuestion(i);
-          App.showToast(`Question ${i + 1} has empty option text`, 'error');
+          App.showToast(`Question ${i + 1} has an option missing both text and image`, 'error');
           return;
         }
         const hasCorrect = q.options.some(o => o.is_correct);

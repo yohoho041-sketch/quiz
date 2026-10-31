@@ -2474,6 +2474,122 @@ input[type="number"] {
   line-height: 1.45;
 }
 
+/* Option Image & Diagram Styling (Player, Builder, Review) */
+.btn-opt-attach-img {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+.btn-opt-attach-img.has-img-attached {
+  background-color: var(--accent-indigo);
+  border-color: var(--accent-indigo);
+  color: #ffffff;
+}
+
+.opt-image-preview-wrapper {
+  position: relative;
+  display: inline-block;
+  margin: 0.45rem 0 0.55rem 0.25rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem;
+}
+.opt-img-thumb-container {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.opt-img-thumb {
+  max-height: 120px;
+  max-width: 260px;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  display: block;
+}
+.btn-remove-opt-img {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  background: var(--accent-rose);
+  color: #ffffff;
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.btn-remove-opt-img:hover {
+  transform: scale(1.1);
+}
+
+/* Student Player Option Image Box */
+.option-image-box {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+  text-align: left;
+}
+.option-image-box img {
+  max-height: 160px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  display: block;
+  cursor: pointer;
+}
+.opt-img-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-top: 0.35rem;
+  transition: all 0.12s ease;
+}
+.opt-img-zoom-btn:hover {
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+/* Review Mode Option Image Box */
+.review-opt-img-box {
+  cursor: pointer;
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: 0.3rem;
+}
+.review-opt-img-box img {
+  max-height: 120px;
+  max-width: 240px;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: block;
+  background: var(--bg-surface);
+  padding: 0.25rem;
+}
+
 /* Builder Page Controls (Card Bottom) */
 .builder-page-controls {
   display: flex;

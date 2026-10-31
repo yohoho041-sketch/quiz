@@ -2063,10 +2063,26 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
           label = '✗ Your Choice';
         }
 
+        const hasImg = Boolean(opt.image_url && opt.image_url.trim());
+        const hasText = Boolean(opt.option_text && opt.option_text.trim());
+        let optInner = '';
+        if (hasImg) {
+          optInner += `
+            <div class="review-opt-img-box" onclick="App.openLightbox('${opt.image_url}')" title="Click to enlarge diagram">
+              <img src="${opt.image_url}" alt="Option Diagram" />
+            </div>
+          `;
+        }
+        if (hasText || !hasImg) {
+          optInner += `<span>${this.formatMathText(opt.option_text || '')}</span>`;
+        }
+
         optionsHtml += `
           <div class="review-opt ${optClass}">
-            <span>${this.formatMathText(opt.option_text)}</span>
-            ${label ? `<small style="font-weight:600;">${label}</small>` : ''}
+            <div style="display:flex; flex-direction:column; gap:0.4rem; flex:1;">
+              ${optInner}
+            </div>
+            ${label ? `<small style="font-weight:600; margin-left:0.75rem; flex-shrink:0;">${label}</small>` : ''}
           </div>
         `;
       });
