@@ -635,11 +635,14 @@
             <div class="builder-sticky-center">
               <span id="builder-stats-indicator" class="builder-status-text">Question 1 of 1</span>
             </div>
-            <div class="builder-sticky-right">
+            <div class="builder-sticky-right" style="display:flex; align-items:center; gap:0.5rem;">
               <button type="button" class="btn btn-outline" id="btn-builder-cancel">Cancel</button>
-              <button type="button" class="btn btn-success" id="btn-builder-save" title="Save Assessment (Ctrl+S)">
-                <span>Save Assessment</span>
-                <span class="kbd-cap" style="background:#000; color:#fff; border-color:#000; font-size:0.65rem; height:18px; min-width:18px;">Ctrl+S</span>
+              <button type="button" class="btn btn-secondary" id="btn-builder-save-draft" title="Save as Draft (hidden from students)" style="gap:0.35rem;">
+                <span>Save Draft</span>
+              </button>
+              <button type="button" class="btn btn-success" id="btn-builder-save" title="Save &amp; Publish for students (Ctrl+S)" style="gap:0.35rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Save &amp; Publish</span>
               </button>
             </div>
           </div>
@@ -1002,9 +1005,9 @@ Explanation: UDP is connectionless and does not guarantee packet ordering."></te
   <script src="/static/vendor/katex/contrib/mhchem.min.js"></script>
 
   <!-- Scripts -->
-  <script src="/static/js/api.js?v=2.7"></script>
-  <script src="/static/js/quiz-player.js?v=2.7"></script>
-  <script src="/static/js/quiz-builder.js?v=2.7"></script>
-  <script src="/static/js/app.js?v=2.7"></script>
+  <script src="/static/js/api.js?v=2.8"></script>
+  <script src="/static/js/quiz-player.js?v=2.8"></script>
+  <script src="/static/js/quiz-builder.js?v=2.8"></script>
+  <script src="/static/js/app.js?v=2.8"></script>
 </body>
 </html>

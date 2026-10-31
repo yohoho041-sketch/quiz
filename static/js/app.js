@@ -197,9 +197,10 @@ const App = {
   enterTeacherMode(pin) {
     this.isTeacherMode = true;
     API.setTeacherPin(pin);
+    API.invalidateQuizzesCache();
     this.updateTeacherModeUI();
     if (this.currentView === 'dashboard') {
-      this.renderDashboardCards();
+      this.showDashboard(true);
     } else if (this.currentView === 'history') {
       this.showHistory();
     }
@@ -208,10 +209,11 @@ const App = {
   exitTeacherMode() {
     this.isTeacherMode = false;
     API.setTeacherPin('');
+    API.invalidateQuizzesCache();
     this.updateTeacherModeUI();
     this.showToast('Switched to Student Portal view', 'info');
     if (this.currentView === 'dashboard') {
-      this.renderDashboardCards();
+      this.showDashboard(true);
     } else if (this.currentView === 'history') {
       this.showHistory();
     }
@@ -426,10 +428,21 @@ const App = {
       QuizBuilder.addQuestion();
     });
 
-    // Builder Save Quiz
-    document.getElementById('btn-builder-save').addEventListener('click', () => {
-      QuizBuilder.saveQuiz();
-    });
+    // Builder Save & Publish Quiz
+    const btnSavePublish = document.getElementById('btn-builder-save');
+    if (btnSavePublish) {
+      btnSavePublish.addEventListener('click', () => {
+        QuizBuilder.saveQuiz(true);
+      });
+    }
+
+    // Builder Save Draft Quiz
+    const btnSaveDraft = document.getElementById('btn-builder-save-draft');
+    if (btnSaveDraft) {
+      btnSaveDraft.addEventListener('click', () => {
+        QuizBuilder.saveQuiz(false);
+      });
+    }
 
     // Builder Quick Import Bottom Button
     const btnQuickImportBottom = document.getElementById('btn-builder-quick-import-bottom');
@@ -743,10 +756,10 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
     }
   },
 
-  async showDashboard() {
+  async showDashboard(forceRefresh = false) {
     this.switchView('dashboard');
     try {
-      this.allQuizzes = await API.getQuizzes();
+      this.allQuizzes = await API.getQuizzes(forceRefresh);
       const stats = await API.getStats();
       this.updateStatsRibbon(stats);
       this.renderDashboardCards();
@@ -964,6 +977,24 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         ? `<span class="badge badge-emerald">Best: ${Math.round(q.best_score_percent)}%</span>`
         : `<span class="badge badge-slate">Unattempted</span>`;
 
+      const isPub = q.is_published !== 0 && q.is_published !== false;
+      const pubBadgeHtml = this.isTeacherMode
+        ? (isPub
+            ? `<span class="badge badge-emerald" style="display:inline-flex;align-items:center;gap:4px;" title="Visible to students"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span> Published</span>`
+            : `<span class="badge badge-amber" style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.15);color:var(--accent-amber);border:1px solid rgba(245,158,11,0.3);" title="Draft: Hidden from students"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span> Draft</span>`)
+        : '';
+
+      const pubBtnHtml = this.isTeacherMode
+        ? (isPub
+            ? `<button class="btn btn-outline btn-sm btn-toggle-publish" title="Unpublish this assessment so students cannot see or attempt it" style="color:var(--accent-amber);border-color:rgba(245,158,11,0.35);">
+                 <span>Unpublish</span>
+               </button>`
+            : `<button class="btn btn-success btn-sm btn-toggle-publish" title="Publish this assessment so students can take it" style="gap:0.35rem;">
+                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                 <span>Publish</span>
+               </button>`)
+        : '';
+
       const editBtnHtml = this.isTeacherMode
         ? `<button class="btn btn-outline btn-sm btn-edit-quiz" title="Edit Assessment">
              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -985,6 +1016,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         <div>
           <div class="quiz-meta">
             <span class="badge badge-indigo">${this.escapeHtml(q.category || 'General')}</span>
+            ${pubBadgeHtml}
             ${scoreBadge}
           </div>
           <h2 class="quiz-title">${this.escapeHtml(q.title)}</h2>
@@ -1021,6 +1053,7 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
               <span>${this.isTeacherMode ? 'Take Exam' : 'Take Assignment'}</span>
             </button>
             ${practiceBtnHtml}
+            ${pubBtnHtml}
             ${editBtnHtml}
             ${delBtnHtml}
           </div>
@@ -1034,6 +1067,21 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
       if (practiceBtn) {
         practiceBtn.addEventListener('click', () => {
           this.startQuiz(q.id, 'practice');
+        });
+      }
+      const pubToggleBtn = card.querySelector('.btn-toggle-publish');
+      if (pubToggleBtn) {
+        pubToggleBtn.addEventListener('click', async () => {
+          const newStatus = !isPub;
+          pubToggleBtn.disabled = true;
+          try {
+            await API.setQuizPublished(q.id, newStatus);
+            this.showToast(newStatus ? `"${q.title}" published! Live for students.` : `"${q.title}" unpublished (saved as draft).`, 'success');
+            await this.showDashboard(true);
+          } catch (e) {
+            this.showToast(`Failed to update publish status: ${e.message}`, 'error');
+            pubToggleBtn.disabled = false;
+          }
         });
       }
       const editBtn = card.querySelector('.btn-edit-quiz');

@@ -235,7 +235,8 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
         if len(parts) == 2 and parts[1] == "quizzes":
             # GET /api/quizzes
-            quizzes = database.list_quizzes()
+            is_teacher = is_teacher_authorized(self.headers)
+            quizzes = database.list_quizzes(include_unpublished=is_teacher)
             return self.send_json({"success": True, "quizzes": quizzes})
 
         if len(parts) == 3 and parts[1] == "quizzes":
@@ -248,6 +249,11 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             quiz = database.get_quiz(quiz_id)
             if not quiz:
                 return self.send_error_json("Quiz not found", 404)
+
+            is_teacher = is_teacher_authorized(self.headers)
+            if not is_teacher and not quiz.get("is_published", 1):
+                return self.send_error_json("This assessment has not been published by the instructor yet", 403)
+
             return self.send_json({"success": True, "quiz": quiz})
 
         if len(parts) == 4 and parts[1] == "quizzes" and parts[3] == "attempts":
@@ -375,12 +381,36 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             record_idempotent_response(dedup_key, 201, resp_data)
             return self.send_json(resp_data, status=201)
 
+        # POST /api/quizzes/<id>/publish
+        if len(parts) == 4 and parts[1] == "quizzes" and parts[3] == "publish":
+            if not is_teacher_authorized(self.headers):
+                return self.send_error_json("Teacher authorization required to publish or unpublish assessments", 403)
+
+            try:
+                quiz_id = int(parts[2])
+            except ValueError:
+                return self.send_error_json("Invalid quiz ID", 400)
+
+            quiz = database.get_quiz(quiz_id)
+            if not quiz:
+                return self.send_error_json("Quiz not found", 404)
+
+            is_pub = bool(payload.get("is_published", True))
+            database.set_quiz_publish_status(quiz_id, is_pub)
+            return self.send_json({"success": True, "quiz_id": quiz_id, "is_published": 1 if is_pub else 0})
+
         # POST /api/quizzes/<id>/attempts
         if len(parts) == 4 and parts[1] == "quizzes" and parts[3] == "attempts":
             try:
                 quiz_id = int(parts[2])
             except ValueError:
                 return self.send_error_json("Invalid quiz ID", 400)
+
+            quiz = database.get_quiz(quiz_id)
+            if not quiz:
+                return self.send_error_json("Quiz not found", 404)
+            if not quiz.get("is_published", 1):
+                return self.send_error_json("Cannot submit attempt to an unpublished assessment", 403)
 
             # Deduplication: prevent duplicate attempt records if student clicks Submit multiple times
             student_roll = str(payload.get("student_roll", "")).strip()

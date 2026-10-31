@@ -23,6 +23,7 @@ const QuizBuilder = {
     this.questions = [];
     this.currentQuestionIndex = 0;
     this.activeInput = null;
+    this.isPublished = 0;
     document.getElementById('builder-header-title').textContent = 'Create New Assessment';
     document.getElementById('input-quiz-title').value = '';
     document.getElementById('input-quiz-desc').value = '';
@@ -42,6 +43,7 @@ const QuizBuilder = {
     this.questions = JSON.parse(JSON.stringify(quiz.questions || []));
     this.currentQuestionIndex = 0;
     this.activeInput = null;
+    this.isPublished = quiz.is_published ? 1 : 0;
 
     document.getElementById('builder-header-title').textContent = `Edit Assessment: ${quiz.title}`;
     document.getElementById('input-quiz-title').value = quiz.title || '';
@@ -867,8 +869,12 @@ const QuizBuilder = {
     return true;
   },
 
-  async saveQuiz() {
+  async saveQuiz(publish = null) {
     if (this._isSaving) return;
+
+    if (publish !== null) {
+      this.isPublished = publish ? 1 : 0;
+    }
 
     const title = document.getElementById('input-quiz-title').value.trim();
     const description = document.getElementById('input-quiz-desc').value.trim();
@@ -932,6 +938,7 @@ const QuizBuilder = {
     const posMarks = parseFloat(document.getElementById('input-quiz-pos-marks').value) || 4.0;
     const negMarks = parseFloat(document.getElementById('input-quiz-neg-marks').value) || 1.0;
 
+    const isPub = this.isPublished ? 1 : 0;
     const payload = {
       title,
       description,
@@ -939,32 +946,44 @@ const QuizBuilder = {
       time_limit_minutes: timeLimit,
       positive_marks: posMarks,
       negative_marks: negMarks,
+      is_published: isPub,
       questions: this.questions
     };
 
     this._isSaving = true;
     const saveBtn = document.getElementById('btn-builder-save');
-    const originalText = saveBtn ? saveBtn.innerHTML : '';
+    const draftBtn = document.getElementById('btn-builder-save-draft');
+    const originalSaveText = saveBtn ? saveBtn.innerHTML : '';
+    const originalDraftText = draftBtn ? draftBtn.innerHTML : '';
+
+    const spinner = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite;">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+        <path d="M12 2a10 10 0 0 1 10 10" />
+      </svg>
+      <span>Saving...</span>
+    `;
+
     if (saveBtn) {
       saveBtn.disabled = true;
       saveBtn.style.opacity = '0.65';
       saveBtn.style.pointerEvents = 'none';
-      saveBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite;">
-          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
-          <path d="M12 2a10 10 0 0 1 10 10" />
-        </svg>
-        <span>Saving...</span>
-      `;
+      if (isPub) saveBtn.innerHTML = spinner;
+    }
+    if (draftBtn) {
+      draftBtn.disabled = true;
+      draftBtn.style.opacity = '0.65';
+      draftBtn.style.pointerEvents = 'none';
+      if (!isPub) draftBtn.innerHTML = spinner;
     }
 
     try {
       if (this.editingQuizId) {
         await API.updateQuiz(this.editingQuizId, payload);
-        App.showToast('Assessment updated successfully!', 'success');
+        App.showToast(isPub ? 'Assessment updated and published for students!' : 'Assessment updated (saved as draft).', 'success');
       } else {
         await API.createQuiz(payload);
-        App.showToast('Assessment created successfully!', 'success');
+        App.showToast(isPub ? 'Assessment published! Live and visible to students.' : 'Assessment saved as Draft (hidden from students).', 'success');
       }
       App.showDashboard();
     } catch (err) {
@@ -975,7 +994,13 @@ const QuizBuilder = {
         saveBtn.disabled = false;
         saveBtn.style.opacity = '';
         saveBtn.style.pointerEvents = '';
-        saveBtn.innerHTML = originalText;
+        saveBtn.innerHTML = originalSaveText;
+      }
+      if (draftBtn) {
+        draftBtn.disabled = false;
+        draftBtn.style.opacity = '';
+        draftBtn.style.pointerEvents = '';
+        draftBtn.innerHTML = originalDraftText;
       }
     }
   },

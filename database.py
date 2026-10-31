@@ -309,6 +309,13 @@ def init_db():
             cursor.execute("ALTER TABLE quizzes ADD COLUMN positive_marks REAL DEFAULT 4.0")
         if "negative_marks" not in q_cols:
             cursor.execute("ALTER TABLE quizzes ADD COLUMN negative_marks REAL DEFAULT 1.0")
+        if "is_published" not in q_cols:
+            cursor.execute("ALTER TABLE quizzes ADD COLUMN is_published INTEGER DEFAULT 1")
+
+        try:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quizzes_published ON quizzes(is_published);")
+        except Exception:
+            pass
 
         # questions table
         qu_cols = [c[1] for c in cursor.execute("PRAGMA table_info(questions)").fetchall()]
@@ -374,12 +381,16 @@ def init_db():
     conn.close()
 
 
-def list_quizzes() -> List[Dict[str, Any]]:
-    """List all quizzes with question counts, marking scheme, and past attempt stats."""
+def list_quizzes(include_unpublished: bool = False) -> List[Dict[str, Any]]:
+    """List all quizzes with question counts, marking scheme, and past attempt stats.
+    If include_unpublished is False (default for students), only return published quizzes.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    query = """
+    where_clause = "" if include_unpublished else "WHERE COALESCE(q.is_published, 1) = 1"
+
+    query = f"""
     SELECT 
         q.id,
         q.title,
@@ -388,6 +399,7 @@ def list_quizzes() -> List[Dict[str, Any]]:
         q.time_limit_minutes,
         q.positive_marks,
         q.negative_marks,
+        COALESCE(q.is_published, 1) as is_published,
         q.created_at,
         COUNT(DISTINCT qu.id) as question_count,
         COUNT(DISTINCT a.id) as attempt_count,
@@ -396,6 +408,7 @@ def list_quizzes() -> List[Dict[str, Any]]:
     FROM quizzes q
     LEFT JOIN questions qu ON q.id = qu.quiz_id
     LEFT JOIN attempts a ON q.id = a.quiz_id
+    {where_clause}
     GROUP BY q.id
     ORDER BY q.id DESC;
     """
@@ -403,6 +416,20 @@ def list_quizzes() -> List[Dict[str, Any]]:
     quizzes = [dict(row) for row in rows]
     conn.close()
     return quizzes
+
+
+def set_quiz_publish_status(quiz_id: int, is_published: bool) -> bool:
+    """Toggle publish status for an assessment (True = 1, False = 0)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE quizzes SET is_published = ? WHERE id = ?",
+        (1 if is_published else 0, quiz_id)
+    )
+    affected = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return affected
 
 
 def get_quiz(quiz_id: int) -> Optional[Dict[str, Any]]:
@@ -416,6 +443,7 @@ def get_quiz(quiz_id: int) -> Optional[Dict[str, Any]]:
         return None
 
     quiz = dict(quiz_row)
+    quiz["is_published"] = int(quiz.get("is_published", 1) if quiz.get("is_published") is not None else 1)
 
     # Get questions ordered by order_index
     questions_rows = cursor.execute(
@@ -455,16 +483,18 @@ def create_quiz(data: Dict[str, Any]) -> int:
 
     pos_marks = float(data.get("positive_marks", 4.0))
     neg_marks = float(data.get("negative_marks", 1.0))
+    is_pub = 0 if (data.get("is_published") is False or data.get("is_published") == 0) else 1
 
     cursor.execute(
-        "INSERT INTO quizzes (title, description, category, time_limit_minutes, positive_marks, negative_marks) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO quizzes (title, description, category, time_limit_minutes, positive_marks, negative_marks, is_published) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             data.get("title", "Untitled Quiz"),
             data.get("description", ""),
             data.get("category", "General"),
             int(data.get("time_limit_minutes", 0)),
             pos_marks,
-            neg_marks
+            neg_marks,
+            is_pub
         )
     )
     quiz_id = cursor.lastrowid
@@ -529,18 +559,34 @@ def update_quiz(quiz_id: int, data: Dict[str, Any]) -> bool:
     pos_marks = float(data.get("positive_marks", 4.0))
     neg_marks = float(data.get("negative_marks", 1.0))
 
-    cursor.execute(
-        "UPDATE quizzes SET title = ?, description = ?, category = ?, time_limit_minutes = ?, positive_marks = ?, negative_marks = ? WHERE id = ?",
-        (
-            data.get("title", "Untitled Quiz"),
-            data.get("description", ""),
-            data.get("category", "General"),
-            int(data.get("time_limit_minutes", 0)),
-            pos_marks,
-            neg_marks,
-            quiz_id
+    if "is_published" in data:
+        is_pub = 1 if data.get("is_published") else 0
+        cursor.execute(
+            "UPDATE quizzes SET title = ?, description = ?, category = ?, time_limit_minutes = ?, positive_marks = ?, negative_marks = ?, is_published = ? WHERE id = ?",
+            (
+                data.get("title", "Untitled Quiz"),
+                data.get("description", ""),
+                data.get("category", "General"),
+                int(data.get("time_limit_minutes", 0)),
+                pos_marks,
+                neg_marks,
+                is_pub,
+                quiz_id
+            )
         )
-    )
+    else:
+        cursor.execute(
+            "UPDATE quizzes SET title = ?, description = ?, category = ?, time_limit_minutes = ?, positive_marks = ?, negative_marks = ? WHERE id = ?",
+            (
+                data.get("title", "Untitled Quiz"),
+                data.get("description", ""),
+                data.get("category", "General"),
+                int(data.get("time_limit_minutes", 0)),
+                pos_marks,
+                neg_marks,
+                quiz_id
+            )
+        )
 
     if cursor.rowcount == 0:
         conn.close()

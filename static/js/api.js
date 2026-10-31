@@ -50,18 +50,48 @@ const API = {
     throw new Error(data.error || 'Incorrect Teacher PIN');
   },
 
-  async getQuizzes() {
-    const res = await fetch('/api/quizzes');
+  invalidateQuizzesCache() {
+    this._quizzesCache = {};
+  },
+
+  async getQuizzes(forceRefresh = false) {
+    const pin = this.getTeacherPin() || '';
+    const now = Date.now();
+    const cacheKey = `quizzes_${pin}`;
+    if (!forceRefresh && this._quizzesCache && this._quizzesCache[cacheKey] && (now - this._quizzesCache[cacheKey].ts < 20000)) {
+      return this._quizzesCache[cacheKey].data;
+    }
+    const res = await fetch('/api/quizzes', { headers: this.getHeaders() });
     if (!res.ok) throw new Error('Failed to fetch quizzes');
     const data = await res.json();
-    return data.quizzes || [];
+    const list = data.quizzes || [];
+    if (!this._quizzesCache) this._quizzesCache = {};
+    this._quizzesCache[cacheKey] = { ts: now, data: list };
+    return list;
   },
 
   async getQuiz(id) {
-    const res = await fetch(`/api/quizzes/${id}`);
-    if (!res.ok) throw new Error('Quiz not found');
+    const res = await fetch(`/api/quizzes/${id}`, { headers: this.getHeaders() });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Quiz not found');
+    }
     const data = await res.json();
     return data.quiz;
+  },
+
+  async setQuizPublished(quizId, isPublished) {
+    const res = await fetch(`/api/quizzes/${quizId}/publish`, {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ is_published: !!isPublished })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update publish status');
+    }
+    this.invalidateQuizzesCache();
+    return await res.json();
   },
 
   async createQuiz(quizData) {
@@ -82,6 +112,7 @@ const API = {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || 'Failed to create quiz');
         }
+        this.invalidateQuizzesCache();
         return await res.json();
       } finally {
         setTimeout(() => {
@@ -112,6 +143,7 @@ const API = {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || 'Failed to update quiz');
         }
+        this.invalidateQuizzesCache();
         return await res.json();
       } finally {
         setTimeout(() => {
@@ -133,6 +165,7 @@ const API = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to delete quiz');
     }
+    this.invalidateQuizzesCache();
     return await res.json();
   },
 

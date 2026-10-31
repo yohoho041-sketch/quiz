@@ -919,6 +919,132 @@ class TestQuizApp(unittest.TestCase):
         # Cleanup
         database.delete_quiz(quiz_id)
 
+    def test_15_publish_workflow_and_student_isolation(self):
+        """Test teacher publish/unpublish workflow and verify unpublished quizzes are hidden from students."""
+        # 1. Teacher creates an assessment in Draft mode (is_published = 0)
+        draft_quiz = {
+            "title": "Unpublished Draft Assignment",
+            "description": "Hidden test for upcoming week",
+            "category": "Physics",
+            "time_limit_minutes": 20,
+            "positive_marks": 4.0,
+            "negative_marks": 1.0,
+            "is_published": 0,
+            "questions": [
+                {
+                    "question_text": "Is this visible to students yet?",
+                    "options": [
+                        {"option_text": "No, it is a draft", "is_correct": True},
+                        {"option_text": "Yes", "is_correct": False}
+                    ]
+                }
+            ]
+        }
+        create_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=json.dumps(draft_quiz).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(create_req) as resp:
+            quiz_id = json.loads(resp.read().decode("utf-8"))["quiz"]["id"]
+
+        # 2. Student queries GET /api/quizzes -> Draft quiz MUST NOT appear
+        student_list_req = urllib.request.Request(f"{BASE_URL}/api/quizzes")
+        with urllib.request.urlopen(student_list_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            student_quiz_ids = [q["id"] for q in data["quizzes"]]
+            self.assertNotIn(quiz_id, student_quiz_ids)
+
+        # 3. Student tries GET /api/quizzes/<id> directly -> Expect 403 Forbidden
+        student_get_req = urllib.request.Request(f"{BASE_URL}/api/quizzes/{quiz_id}")
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(student_get_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 4. Student tries to submit an attempt to draft quiz -> Expect 403 Forbidden
+        attempt_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/attempts",
+            data=json.dumps({"student_name": "Eager Student", "student_roll": "777888", "answers": {}}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(attempt_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 5. Teacher queries GET /api/quizzes with PIN -> Draft quiz MUST appear with is_published == 0
+        teacher_list_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            headers={"X-Teacher-PIN": "2026"}
+        )
+        with urllib.request.urlopen(teacher_list_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            draft_found = next((q for q in data["quizzes"] if q["id"] == quiz_id), None)
+            self.assertIsNotNone(draft_found)
+            self.assertEqual(draft_found["is_published"], 0)
+
+        # 6. Unauthorized user attempts to publish -> Expect 403
+        unauth_pub_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/publish",
+            data=json.dumps({"is_published": True}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(unauth_pub_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # 7. Teacher publishes the quiz
+        pub_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/publish",
+            data=json.dumps({"is_published": True}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(pub_req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["success"])
+            self.assertEqual(data["is_published"], 1)
+
+        # 8. Student now queries GET /api/quizzes -> Quiz IS now visible!
+        with urllib.request.urlopen(student_list_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            student_quiz_ids = [q["id"] for q in data["quizzes"]]
+            self.assertIn(quiz_id, student_quiz_ids)
+
+        # 9. Student now queries GET /api/quizzes/<id> -> Expect 200 OK
+        with urllib.request.urlopen(student_get_req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data["quiz"]["id"], quiz_id)
+            self.assertEqual(data["quiz"]["is_published"], 1)
+
+        # 10. Student submits attempt successfully now that it is published
+        with urllib.request.urlopen(attempt_req) as resp:
+            self.assertEqual(resp.status, 201)
+
+        # 11. Teacher unpublishes quiz -> Becomes draft again
+        unpub_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/publish",
+            data=json.dumps({"is_published": False}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(unpub_req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data["is_published"], 0)
+
+        # Verify hidden from students again
+        with urllib.request.urlopen(student_list_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertNotIn(quiz_id, [q["id"] for q in data["quizzes"]])
+
+        # Cleanup
+        database.delete_quiz(quiz_id)
+
 
 if __name__ == "__main__":
     unittest.main()
