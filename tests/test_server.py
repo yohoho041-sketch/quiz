@@ -816,6 +816,109 @@ class TestQuizApp(unittest.TestCase):
         # Cleanup
         database.delete_quiz(quiz_id)
 
+    def test_14_single_submission_enforcement(self):
+        """Test that a student cannot submit multiple attempts for a quiz even with multi-clicks or repeated submits."""
+        # 1. Create a test quiz
+        quiz_data = {
+            "title": "Strict Single Submission Quiz",
+            "description": "Verifying multi-click and duplicate submission prevention",
+            "category": "Mathematics",
+            "time_limit_minutes": 15,
+            "positive_marks": 4.0,
+            "negative_marks": 1.0,
+            "questions": [
+                {
+                    "question_text": "What is 2 + 2?",
+                    "options": [
+                        {"option_text": "3", "is_correct": False},
+                        {"option_text": "4", "is_correct": True}
+                    ]
+                }
+            ]
+        }
+        create_req = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes",
+            data=json.dumps(quiz_data).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Teacher-PIN": "2026"},
+            method="POST"
+        )
+        with urllib.request.urlopen(create_req) as resp:
+            quiz_id = json.loads(resp.read().decode("utf-8"))["quiz"]["id"]
+
+        student_roll = "888123"
+        attempt_payload = {
+            "score": 1,
+            "total_questions": 1,
+            "time_taken_seconds": 30,
+            "student_name": "Rohan Test",
+            "student_roll": student_roll,
+            "answers": {"1": "4"}
+        }
+
+        # 2. First submission
+        req1 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/attempts",
+            data=json.dumps(attempt_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req1) as resp1:
+            self.assertEqual(resp1.status, 201)
+            data1 = json.loads(resp1.read().decode("utf-8"))
+            att_id_1 = data1["attempt_id"]
+            self.assertIsNotNone(att_id_1)
+
+        # 3. Multi-click rapid second submission
+        req2 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/attempts",
+            data=json.dumps(attempt_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req2) as resp2:
+            self.assertEqual(resp2.status, 201)
+            data2 = json.loads(resp2.read().decode("utf-8"))
+            att_id_2 = data2["attempt_id"]
+            self.assertEqual(att_id_1, att_id_2)
+
+        # 4. Repeated submission (simulating delayed click outside instant window with different answers)
+        diff_payload = {
+            "score": 0,
+            "total_questions": 1,
+            "time_taken_seconds": 45,
+            "student_name": "Rohan Test",
+            "student_roll": student_roll,
+            "answers": {"1": "3"}
+        }
+        req3 = urllib.request.Request(
+            f"{BASE_URL}/api/quizzes/{quiz_id}/attempts",
+            data=json.dumps(diff_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req3) as resp3:
+            self.assertEqual(resp3.status, 201)
+            data3 = json.loads(resp3.read().decode("utf-8"))
+            att_id_3 = data3["attempt_id"]
+            self.assertEqual(att_id_1, att_id_3)
+
+        # 5. Direct database layer verification
+        db_att_id = database.record_attempt(
+            quiz_id, 1, 1, 60, {"1": "4"},
+            student_name="Rohan Test",
+            student_roll=student_roll
+        )
+        self.assertEqual(db_att_id, att_id_1)
+
+        # 6. Verify strictly ONE attempt exists in the database
+        quiz_attempts = database.get_quiz_attempts(quiz_id)
+        self.assertEqual(len(quiz_attempts), 1)
+        self.assertEqual(quiz_attempts[0]["id"], att_id_1)
+        self.assertEqual(quiz_attempts[0]["student_roll"], student_roll)
+
+        # Cleanup
+        database.delete_quiz(quiz_id)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -388,9 +388,15 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
             answers = payload.get("answers", {})
             answers_str = json.dumps(answers, sort_keys=True)
             dedup_key = f"attempt_{quiz_id}_{student_roll}_{hashlib.sha256(answers_str.encode('utf-8')).hexdigest()}"
-            cached_status, cached_resp = check_idempotent_request(dedup_key, window_seconds=10.0)
+            cached_status, cached_resp = check_idempotent_request(dedup_key, window_seconds=300.0)
             if cached_resp is not None:
                 return self.send_json(cached_resp, status=cached_status)
+
+            if student_roll:
+                roll_key = f"attempt_roll_{quiz_id}_{student_roll}"
+                cached_status, cached_resp = check_idempotent_request(roll_key, window_seconds=300.0)
+                if cached_resp is not None:
+                    return self.send_json(cached_resp, status=cached_status)
 
             score = int(payload.get("score", 0))
             total_questions = int(payload.get("total_questions", 0))
@@ -424,6 +430,8 @@ class QuizRequestHandler(BaseHTTPRequestHandler):
 
             resp_data = {"success": True, "attempt_id": attempt_id}
             record_idempotent_response(dedup_key, 201, resp_data)
+            if student_roll:
+                record_idempotent_response(f"attempt_roll_{quiz_id}_{student_roll}", 201, resp_data)
             return self.send_json(resp_data, status=201)
 
         return self.send_error_json("API route not found", 404)

@@ -8,6 +8,7 @@ Runs with Python standard library, zero pip dependencies required.
 import os
 import sqlite3
 import json
+import time
 import urllib.request
 import base64
 from typing import List, Dict, Any, Optional
@@ -343,6 +344,30 @@ def init_db():
             cursor.execute("ALTER TABLE attempts ADD COLUMN violations_log TEXT DEFAULT '[]'")
         if "is_disqualified" not in att_cols:
             cursor.execute("ALTER TABLE attempts ADD COLUMN is_disqualified INTEGER DEFAULT 0")
+
+        # Deduplication clean-up for accidental duplicate rows
+        try:
+            cursor.execute("""
+                DELETE FROM attempts 
+                WHERE id NOT IN (
+                    SELECT MIN(id) 
+                    FROM attempts 
+                    WHERE student_roll != '' 
+                    GROUP BY quiz_id, student_roll
+                ) AND student_roll != ''
+            """)
+        except Exception:
+            pass
+
+        # Database-level partial unique index to guarantee atomic single submissions
+        try:
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_attempts_quiz_roll_unique 
+                ON attempts(quiz_id, student_roll) 
+                WHERE student_roll != ''
+            """)
+        except Exception:
+            pass
 
     run_migrations()
     conn.commit()
@@ -719,29 +744,57 @@ def record_attempt(
     clean_name = str(student_name or "").strip() or "Anonymous Student"
     clean_roll = str(student_roll or "").strip()
 
-    cursor.execute(
-        """INSERT INTO attempts 
-           (quiz_id, student_name, student_roll, score, total_questions, time_taken_seconds, answers_json, positive_score, negative_penalty, net_marks, max_marks, violations_count, violations_log, is_disqualified) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            quiz_id,
-            clean_name,
-            clean_roll,
-            final_score,
-            total_q_count if total_questions == 0 else total_questions,
-            time_taken_seconds,
-            json.dumps(payload_dict),
-            final_pos_score,
-            final_neg_penalty,
-            final_net_marks,
-            final_max_marks,
-            int(violations_count),
-            v_log_str,
-            1 if is_disqualified else 0
+    # Deduplication Guard:
+    # If student_roll is provided, ensure ONLY ONE attempt record per student per quiz assignment.
+    # If an attempt by this student_roll already exists for this quiz, return the existing attempt_id.
+    if clean_roll:
+        existing = cursor.execute(
+            """SELECT id FROM attempts 
+               WHERE quiz_id = ? AND student_roll = ? 
+               ORDER BY id ASC LIMIT 1""",
+            (quiz_id, clean_roll)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return existing["id"]
+
+    try:
+        cursor.execute(
+            """INSERT INTO attempts 
+               (quiz_id, student_name, student_roll, score, total_questions, time_taken_seconds, answers_json, positive_score, negative_penalty, net_marks, max_marks, violations_count, violations_log, is_disqualified) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                quiz_id,
+                clean_name,
+                clean_roll,
+                final_score,
+                total_q_count if total_questions == 0 else total_questions,
+                time_taken_seconds,
+                json.dumps(payload_dict),
+                final_pos_score,
+                final_neg_penalty,
+                final_net_marks,
+                final_max_marks,
+                int(violations_count),
+                v_log_str,
+                1 if is_disqualified else 0
+            )
         )
-    )
-    attempt_id = cursor.lastrowid
-    conn.commit()
+        attempt_id = cursor.lastrowid
+        conn.commit()
+    except (sqlite3.IntegrityError, Exception) as err:
+        # If UNIQUE constraint or conflict caught under concurrent requests, fetch and return the existing attempt
+        if clean_roll:
+            existing = cursor.execute(
+                "SELECT id FROM attempts WHERE quiz_id = ? AND student_roll = ? ORDER BY id ASC LIMIT 1",
+                (quiz_id, clean_roll)
+            ).fetchone()
+            if existing:
+                conn.close()
+                return existing["id"]
+        conn.close()
+        raise err
+
     conn.close()
     return attempt_id
 

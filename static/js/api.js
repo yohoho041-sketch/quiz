@@ -179,16 +179,34 @@ const API = {
   },
 
   async recordAttempt(quizId, attemptData) {
-    const key = `attempt_${quizId}_${attemptData.student_roll || ''}_${JSON.stringify(attemptData.answers || {})}`;
-    if (this._inFlight && this._inFlight.has(key)) {
+    if (!this._completedAttempts) this._completedAttempts = new Map();
+    if (!this._inFlight) this._inFlight = new Map();
+
+    const roll = String(attemptData.student_roll || '').trim();
+    const rollKey = roll ? `attempt_roll_${quizId}_${roll}` : null;
+    const answerHash = JSON.stringify(attemptData.answers || {});
+    const key = `attempt_${quizId}_${roll}_${answerHash}`;
+
+    // 1. If this attempt was already recorded successfully in this session, return cached response immediately
+    if (rollKey && this._completedAttempts.has(rollKey)) {
+      return this._completedAttempts.get(rollKey);
+    }
+    if (this._completedAttempts.has(key)) {
+      return this._completedAttempts.get(key);
+    }
+
+    // 2. If identical request is currently in-flight, return the existing active Promise
+    if (rollKey && this._inFlight.has(rollKey)) {
+      return this._inFlight.get(rollKey);
+    }
+    if (this._inFlight.has(key)) {
       return this._inFlight.get(key);
     }
-    if (!this._inFlight) this._inFlight = new Map();
 
     const promise = (async () => {
       try {
         const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
-          ? AbortSignal.timeout(12000) 
+          ? AbortSignal.timeout(15000) 
           : undefined;
         const res = await fetch(`/api/quizzes/${quizId}/attempts`, {
           method: 'POST',
@@ -200,17 +218,19 @@ const API = {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || `Server returned ${res.status}`);
         }
-        return await res.json();
+        const data = await res.json();
+        // Permanently cache successful attempt response for this session
+        if (rollKey) this._completedAttempts.set(rollKey, data);
+        this._completedAttempts.set(key, data);
+        return data;
       } catch (err) {
-        if (this._inFlight) this._inFlight.delete(key);
+        if (rollKey) this._inFlight.delete(rollKey);
+        this._inFlight.delete(key);
         throw err;
-      } finally {
-        setTimeout(() => {
-          if (this._inFlight) this._inFlight.delete(key);
-        }, 2000);
       }
     })();
 
+    if (rollKey) this._inFlight.set(rollKey, promise);
     this._inFlight.set(key, promise);
     return promise;
   },

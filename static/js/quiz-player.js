@@ -29,6 +29,24 @@ const QuizPlayer = {
       if (studentInfo.name) this.studentName = studentInfo.name.trim();
       if (studentInfo.roll) this.studentRoll = studentInfo.roll.trim();
     }
+    this.hasSubmitted = false;
+    this._isSubmitting = false;
+
+    const btnSubmit = document.getElementById('btn-submit-quiz');
+    const btnPalette = document.getElementById('btn-palette-submit-quiz');
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.style.opacity = '';
+      btnSubmit.style.pointerEvents = '';
+      btnSubmit.innerHTML = '<span>Submit Test</span>';
+    }
+    if (btnPalette) {
+      btnPalette.disabled = false;
+      btnPalette.style.opacity = '';
+      btnPalette.style.pointerEvents = '';
+      btnPalette.innerHTML = '<span>Submit Exam</span>';
+    }
+
     this.currentIndex = 0;
     this.userAnswers = {};
     this.flaggedQuestions.clear();
@@ -531,11 +549,26 @@ const QuizPlayer = {
     const unanswered = total - answeredCount;
     const markedCount = this.flaggedQuestions ? this.flaggedQuestions.size : 0;
 
+    if (this.hasSubmitted || this._isSubmitting) return;
+
     const modal = document.getElementById('submit-confirm-modal');
     if (!modal) {
       // Fallback to direct submit if modal is absent
       this.submitQuiz();
       return;
+    }
+
+    const btnProceed = document.getElementById('btn-submit-confirm-proceed');
+    const btnCancel = document.getElementById('btn-submit-confirm-cancel');
+    if (btnProceed) {
+      btnProceed.disabled = false;
+      btnProceed.style.pointerEvents = '';
+      btnProceed.style.opacity = '';
+      btnProceed.innerHTML = '<span>Submit Now</span>';
+    }
+    if (btnCancel) {
+      btnCancel.disabled = false;
+      btnCancel.style.pointerEvents = '';
     }
 
     const statsEl = document.getElementById('submit-confirm-stats');
@@ -579,6 +612,27 @@ const QuizPlayer = {
   },
 
   executeSubmitFromModal() {
+    if (this.hasSubmitted || this._isSubmitting) return;
+
+    const btnProceed = document.getElementById('btn-submit-confirm-proceed');
+    const btnCancel = document.getElementById('btn-submit-confirm-cancel');
+    if (btnProceed) {
+      btnProceed.disabled = true;
+      btnProceed.style.pointerEvents = 'none';
+      btnProceed.style.opacity = '0.65';
+      btnProceed.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 4px;">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" />
+        </svg>
+        <span>Submitting...</span>
+      `;
+    }
+    if (btnCancel) {
+      btnCancel.disabled = true;
+      btnCancel.style.pointerEvents = 'none';
+    }
+
     this.hideSubmitConfirmModal();
     this.submitQuiz();
   },
@@ -795,7 +849,10 @@ const QuizPlayer = {
   },
 
   async submitQuiz(forced = false) {
-    if (this._isSubmitting) return;
+    if (this.hasSubmitted || this._isSubmitting) {
+      console.warn('Submission already in progress or completed.');
+      return;
+    }
     this._isSubmitting = true;
 
     const btnSubmit = document.getElementById('btn-submit-quiz');
@@ -915,6 +972,7 @@ const QuizPlayer = {
         App.showToast(`Submission notice: Recorded on device (${e.message || 'Server timeout'})`, 'warning');
       }
 
+      this.hasSubmitted = true;
       App.showResults({
         quiz: this.quiz,
         userAnswers: this.userAnswers,
@@ -929,18 +987,33 @@ const QuizPlayer = {
         maxMarks: maxMarks
       });
     } finally {
-      this._isSubmitting = false;
-      if (btnSubmit) {
-        btnSubmit.disabled = false;
-        btnSubmit.style.opacity = '';
-        btnSubmit.style.pointerEvents = '';
-        btnSubmit.innerHTML = originalText;
-      }
-      if (btnPalette) {
-        btnPalette.disabled = false;
-        btnPalette.style.opacity = '';
-        btnPalette.style.pointerEvents = '';
-        btnPalette.innerHTML = originalPaletteText;
+      if (this.hasSubmitted) {
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.style.opacity = '0.5';
+          btnSubmit.style.pointerEvents = 'none';
+          btnSubmit.innerHTML = '<span>Submitted</span>';
+        }
+        if (btnPalette) {
+          btnPalette.disabled = true;
+          btnPalette.style.opacity = '0.5';
+          btnPalette.style.pointerEvents = 'none';
+          btnPalette.innerHTML = '<span>Submitted</span>';
+        }
+      } else {
+        this._isSubmitting = false;
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.style.opacity = '';
+          btnSubmit.style.pointerEvents = '';
+          btnSubmit.innerHTML = originalText || '<span>Submit Test</span>';
+        }
+        if (btnPalette) {
+          btnPalette.disabled = false;
+          btnPalette.style.opacity = '';
+          btnPalette.style.pointerEvents = '';
+          btnPalette.innerHTML = originalPaletteText || '<span>Submit Exam</span>';
+        }
       }
     }
   },

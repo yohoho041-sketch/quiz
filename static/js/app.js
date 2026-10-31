@@ -1803,6 +1803,24 @@ Explanation: Hash tables achieve O(1) average/amortized performance with suitabl
         this.showToast('This assessment has no questions yet', 'error');
         return;
       }
+
+      // Check if student has already submitted this test assignment
+      const roll = (candidateInfo && candidateInfo.roll) || this.getStudentPin();
+      if (mode === 'exam' && roll) {
+        try {
+          const attempts = await API.getAllAttempts();
+          const numQid = parseInt(quizId, 10);
+          const prior = attempts.find(a => a.quiz_id === numQid && (a.student_roll || '').trim() === roll.trim());
+          if (prior) {
+            this.showToast(`You have already completed and submitted this assessment (Attempt #${prior.id}). Each test assignment can only be submitted once.`, 'info');
+            this.showHistory();
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('Prior attempt verification check error (offline fallback):', checkErr);
+        }
+      }
+
       this.switchView('player');
       QuizPlayer.startQuiz(quiz, mode, null, candidateInfo);
     } catch (err) {
